@@ -21,9 +21,9 @@ rm -f uevalrun.rootfs.minix.img  # Make sure it's not mounted.
 ./busybox tar cvf mkroot.tmp.tar busybox
 cat >mkroot.tmp.sh <<'ENDMKROOT'
 #! /bin/sh
-# Don't autorun /sbin/halt, so we'll get a kernel panic in the UML guest,
+# Don't autorun /sbin/minihalt, so we'll get a kernel panic in the UML guest,
 # thus we'll get a nonzero exit code in the UML host if this script fails.
-#trap /sbin/halt EXIT
+#trap /sbin/minihalt EXIT
 set -ex
 echo "Hello, World!"
 #ls /proc  # Works.
@@ -76,15 +76,14 @@ ln -s ../bin/busybox /fs/bin/vi
 ln -s ../bin/busybox /fs/bin/stty
 
 : guest-creator script OK, halting.
-/sbin/halt
+/sbin/minihalt
 ENDMKROOT
 
-# Use the ext2 driver in uevalrun.linux.uml to populate our rootfs
+# Use the minix driver in uevalrun.linux.uml to populate our rootfs
 # (uevalrun.rootfs.minix.img).
 ./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=10M \
     ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.minix.img \
-    ubdc=mkroot.tmp.sh ubdd=mkroot.tmp.tar init=/sbin/halt
-# TODO(pts): Detect if the shell script has succeeded.
+    ubdc=mkroot.tmp.sh ubdd=mkroot.tmp.tar init=/sbin/minihalt
 rm -f mkroot.tmp.sh mkroot.tmp.tar
 
 : make_rootfs.sh OK.

@@ -1,12 +1,12 @@
 #! /bin/bash --
 #
-# make_root_fs_mini.sh: create the mini filesystem
-# by pts@fazekas.hu at Wed Nov 24 02:04:14 CET 2010
+# make_root_fs_mini.sh: create the mini filesystem (using itself)
+# by pts@fazekas.hu at Wed Nov 24 23:30:45 CET 2010
 #
 # The mini filesystem is used for bootstrapping the real filesystem creation.
 #
-# Creating the mini filesystem needs root privileges, but then it can be
-# redistributed.
+# UML + the previous version of the mini filesystem is used to recreate the
+# mini filesystem.
 
 set -ex
 
@@ -17,55 +17,98 @@ BUSYBOX_KB=$(ls -l busybox.mini | ./busybox awk '{printf "%d", (($5+1024)/1024)}
 test "$BUSYBOX_KB"
 let MINIX_KB=60+BUSYBOX_KB
 
-rm -f uevalrun.rootfs.mini.minix.img  # Make sure it's not mounted.
-./busybox dd if=/dev/zero of=uevalrun.rootfs.mini.minix.img bs=${MINIX_KB}K count=1
-chmod 644 uevalrun.rootfs.mini.minix.img
-test "$SUDO_USER" && sudo chown "$SUDO_USER" uevalrun.rootfs.mini.minix.img
+test -f uevalrun.rootfs.mini.minix.img ||
+    svn revert uevalrun.rootfs.mini.minix.img
+test -e minihalt ||
+    cp precompiled/minihalt minihalt
+
+rm -f uevalrun.rootfs.newmini.minix.img  # Make sure it's not mounted.
+./busybox dd if=/dev/zero of=uevalrun.rootfs.newmini.minix.img bs=${MINIX_KB}K count=1
+chmod 644 uevalrun.rootfs.newmini.minix.img
+test "$SUDO_USER" && sudo chown "$SUDO_USER" uevalrun.rootfs.newmini.minix.img
 # Increase `-i 40' here to increase the file size limit if you get a
 # `No space left on device' when running this script.
-./busybox mkfs.minix -n 14 -i 40 uevalrun.rootfs.mini.minix.img
+./busybox mkfs.minix -n 14 -i 40 uevalrun.rootfs.newmini.minix.img
 
-test "$EUID" = 0
-umount rp || true
-rm -rf rp
-mkdir -p rp
-mount -o loop uevalrun.rootfs.mini.minix.img rp
-mkdir rp/{dev,bin,sbin,proc,fs}
-cp -a /dev/console rp/dev/
-cp -a /dev/ttyS0 rp/dev/
-cp -a /dev/ttyS1 rp/dev/
-cp -a /dev/tty0 rp/dev/
-cp -a /dev/tty1 rp/dev/
-cp -a /dev/tty2 rp/dev/
-cp -a /dev/tty3 rp/dev/
-cp -a /dev/tty4 rp/dev/
-cp -a /dev/null rp/dev/
-cp -a /dev/zero rp/dev/
-mknod rp/dev/ubdb b 98 16
-mknod rp/dev/ubdc b 98 32
-mknod rp/dev/ubdd b 98 48
-chmod 711 rp/dev/ubdb
-chmod 600 rp/dev/ubdc
-chmod 700 rp/dev/ubdd
+./busybox tar cvf mkrootmini.tmp.tar busybox.mini minihalt
+cat >mkrootmini.tmp.sh <<'ENDMKROOT'
+#! /bin/sh
+# Don't autorun /sbin/minihalt, so we'll get a kernel panic in the UML guest,
+# thus we'll get a nonzero exit code in the UML host if this script fails.
+#trap /sbin/halt EXIT
+set -ex
+echo "Hello, World!"
+#ls /proc  # Works.
 
-cp busybox.mini rp/bin/busybox
-for CMD in \
-  mount umount [ [[ ash awk cat chgrp chmod chown cmp cp dd echo egrep \
-  expr false fgrep grep install ls ln mkdir mkfifo mknod mv \
-  pwd readlink realpath rm rmdir sh sync tar  \
-  test true uncompress wc xargs yes \
-; do
-  ln -s ../bin/busybox rp/bin/"$CMD"
-done
+mkdir /fs/dev /fs/bin /fs/sbin /fs/proc /fs/fs
+cp -a /dev/console /fs/dev/
+cp -a /dev/ttyS0 /fs/dev/
+cp -a /dev/ttyS1 /fs/dev/
+cp -a /dev/tty0 /fs/dev/
+cp -a /dev/tty1 /fs/dev/
+cp -a /dev/tty2 /fs/dev/
+cp -a /dev/tty3 /fs/dev/
+cp -a /dev/tty4 /fs/dev/
+cp -a /dev/null /fs/dev/
+cp -a /dev/zero /fs/dev/
+mknod /fs/dev/ubdb b 98 16
+mknod /fs/dev/ubdc b 98 32
+mknod /fs/dev/ubdd b 98 48
+chmod 711 /fs/dev/ubdb
+chmod 600 /fs/dev/ubdc
+chmod 700 /fs/dev/ubdd
 
-# busybox can't halt without /proc, so we'll use minihalt
-#ln -s ../bin/busybox rp/sbin/haltt
-if test -x minihalt; then
-  cp minihalt rp/sbin/halt
-else
-  test -x precompiled/minihalt
-  cp precompiled/minihalt rp/sbin/halt
-fi
+(cd /fs && tar xf /dev/ubdd)  # creates /fs/busybox.mini and /fs/minihalt
+mv /fs/busybox.mini /fs/bin/busybox
+mv /fs/minihalt /fs/sbin/minihalt
+ln -s ../bin/busybox /fs/bin/[
+ln -s ../bin/busybox /fs/bin/[[
+ln -s ../bin/busybox /fs/bin/ash
+ln -s ../bin/busybox /fs/bin/awk
+ln -s ../bin/busybox /fs/bin/cat
+ln -s ../bin/busybox /fs/bin/chgrp
+ln -s ../bin/busybox /fs/bin/chmod
+ln -s ../bin/busybox /fs/bin/chown
+ln -s ../bin/busybox /fs/bin/cmp
+ln -s ../bin/busybox /fs/bin/cp
+ln -s ../bin/busybox /fs/bin/dd
+ln -s ../bin/busybox /fs/bin/echo
+ln -s ../bin/busybox /fs/bin/egrep
+ln -s ../bin/busybox /fs/bin/expr
+ln -s ../bin/busybox /fs/bin/false
+ln -s ../bin/busybox /fs/bin/fgrep
+ln -s ../bin/busybox /fs/bin/grep
+ln -s ../bin/busybox /fs/bin/install
+ln -s ../bin/busybox /fs/bin/ls
+ln -s ../bin/busybox /fs/bin/ln
+ln -s ../bin/busybox /fs/bin/mkdir
+ln -s ../bin/busybox /fs/bin/mkfifo
+ln -s ../bin/busybox /fs/bin/mknod
+ln -s ../bin/busybox /fs/bin/mv
+ln -s ../bin/busybox /fs/bin/pwd
+ln -s ../bin/busybox /fs/bin/readlink
+ln -s ../bin/busybox /fs/bin/realpath
+ln -s ../bin/busybox /fs/bin/rm
+ln -s ../bin/busybox /fs/bin/rmdir
+ln -s ../bin/busybox /fs/bin/sh
+ln -s ../bin/busybox /fs/bin/sync
+ln -s ../bin/busybox /fs/bin/tar
+ln -s ../bin/busybox /fs/bin/test
+ln -s ../bin/busybox /fs/bin/true
+ln -s ../bin/busybox /fs/bin/uncompress
+ln -s ../bin/busybox /fs/bin/wc
+ln -s ../bin/busybox /fs/bin/xargs
+ln -s ../bin/busybox /fs/bin/yes
 
-umount rp || true
+: guest-creator script OK, halting.
+/sbin/minihalt
+ENDMKROOT
+
+./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=10M \
+    ubda=uevalrun.rootfs.mini.minix.img \
+    ubdb=uevalrun.rootfs.newmini.minix.img \
+    ubdc=mkrootmini.tmp.sh ubdd=mkrootmini.tmp.tar init=/sbin/minihalt
+rm -f mkrootmini.tmp.sh mkrootmini.tmp.tar
+mv -f uevalrun.rootfs.newmini.minix.img uevalrun.rootfs.mini.minix.img
+
 : make_rootfs_mini.sh OK.

@@ -10,12 +10,13 @@ test "${0%/*}" != "$0" && cd "${0%/*}"
 test -f busybox
 BUSYBOX_KB=$(./busybox ls -l busybox | ./busybox awk '{printf "%d", (($5+1024)/1024)}')
 test "$BUSYBOX_KB"
-let EXT2_KB=303+BUSYBOX_KB
-let BYTES_PER_INODE=3\*EXT2_KB
+let MINIX_KB=60+BUSYBOX_KB
 
-rm -f uevalrun.rootfs.ext2.img  # Make sure it's not mounted.
-./busybox dd if=/dev/zero of=uevalrun.rootfs.ext2.img bs=${EXT2_KB}K count=1
-./busybox mkfs.ext2 -i "$BYTES_PER_INODE" -F uevalrun.rootfs.ext2.img
+rm -f uevalrun.rootfs.minix.img  # Make sure it's not mounted.
+./busybox dd if=/dev/zero of=uevalrun.rootfs.minix.img bs=${MINIX_KB}K count=1
+# Increase `-i 100' here to increase the file size limit if you get a
+# `No space left on device' when running this script.
+./busybox mkfs.minix -n 14 -i 100 uevalrun.rootfs.minix.img
 
 ./busybox tar cvf mkroot.tmp.tar busybox
 cat >mkroot.tmp.sh <<'ENDMKROOT'
@@ -25,7 +26,7 @@ cat >mkroot.tmp.sh <<'ENDMKROOT'
 #trap /sbin/halt EXIT
 set -ex
 echo "Hello, Worldd!"
-mount /dev/ubdb /fs -t ext2
+mount /dev/ubdb /fs -t minix
 
 mkdir /fs/dev /fs/bin /fs/sbin /fs/proc /fs/etc
 mkdir /fs/etc/init.d
@@ -80,9 +81,9 @@ umount /fs
 ENDMKROOT
 
 # Use the ext2 driver in uevalrun.linux.uml to populate our rootfs
-# (uevalrun.rootfs.ext2.img).
+# (uevalrun.rootfs.minix.img).
 ./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=10M \
-    ubda=uevalrun.rootfs.mini.ext2.img ubdb=uevalrun.rootfs.ext2.img \
+    ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.minix.img \
     ubdc=mkroot.tmp.sh ubdd=mkroot.tmp.tar init=/sbin/halt
 # TODO(pts): Detect if the shell script has succeeded.
 rm -f mkroot.tmp.sh mkroot.tmp.tar

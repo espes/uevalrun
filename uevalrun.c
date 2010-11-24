@@ -338,7 +338,7 @@ int main(int argc, char** argv) {
   }
   fclose(f);
 
-  uml_rootfs_path = xstrcat(prog_dir, "/uevalrun.rootfs.ext2.img");
+  uml_rootfs_path = xstrcat(prog_dir, "/uevalrun.rootfs.minix.img");
   if (NULL == (f = fopen(uml_linux_path, "r"))) {
     printf("@ error: uml_linux not found: %s: %s\n",
            uml_linux_path, strerror(errno));

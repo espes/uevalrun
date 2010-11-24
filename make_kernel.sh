@@ -27,7 +27,7 @@ mkdir make_kernel.tmp
 (cd make_kernel.tmp && tar xj) <"$KERNEL_TBZ2"
 mv make_kernel.tmp/linux-* make_kernel.tmp/kernel
 : Applying linux-2.6.36-uevalrun.patch
-(cd make_kernel.tmp/kernel && patch -p1) <linux-2.6.36-uevalrun.patch
+(cd make_kernel.tmp/kernel && patch -f -p1) <linux-2.6.36-uevalrun.patch
 : Extracting "$CROSS_COMPILER.tar.bz2"
 (cd make_kernel.tmp && tar xj) <"$CROSS_COMPILER.tar.bz2"
 mv make_kernel.tmp/cross-compiler-* make_kernel.tmp/cross-compiler
@@ -46,7 +46,7 @@ ls -l         make_kernel.tmp/kernel/vmlinux
 rm -f uevalrun.linux.uml.tmp
 cp make_kernel.tmp/kernel/vmlinux uevalrun.linux.uml.tmp
 mv uevalrun.linux.uml{.tmp,}  # Atomic replace.
-ls -l uevalrun.linux.xml
+ls -l uevalrun.linux.uml
 
 # Full compile and extract time on narancs:
 # 118.13user 14.18system 2:24.38elapsed 91%CPU (0avgtext+0avgdata 80528maxresident)k

@@ -14,7 +14,7 @@ This patch applies cleanly to the following kernels:
 
 --- linux-2.6.36.orig/.config	1970-01-01 01:00:00.000000000 +0100
 +++ linux-2.6.36/.config	2010-11-24 00:16:02.000000000 +0100
-@@ -0,0 +1,393 @@
+@@ -0,0 +1,411 @@
 +#
 +# Automatically generated make config: don't edit
 +# Linux kernel version: 2.6.36
@@ -292,7 +292,25 @@ This patch applies cleanly to the following kernels:
 +#
 +# File systems
 +#
-+CONFIG_EXT2_FS=y
++CONFIG_MINIX_FS=y
++# CONFIG_ADFS_FS is not set
++# CONFIG_AFFS_FS is not set
++# CONFIG_HFS_FS is not set
++# CONFIG_HFSPLUS_FS is not set
++# CONFIG_BEFS_FS is not set
++# CONFIG_BFS_FS is not set
++# CONFIG_EFS_FS is not set
++# CONFIG_LOGFS is not set
++# CONFIG_CRAMFS is not set
++# CONFIG_SQUASHFS is not set
++# CONFIG_VXFS_FS is not set
++# CONFIG_OMFS_FS is not set
++# CONFIG_HPFS_FS is not set
++# CONFIG_QNX4FS_FS is not set
++# CONFIG_ROMFS_FS is not set
++# CONFIG_SYSV_FS is not set
++# CONFIG_UFS_FS is not set
++# CONFIG_EXT2_FS is not set
 +# CONFIG_EXT2_FS_XATTR is not set
 +# CONFIG_EXT2_FS_XIP is not set
 +# CONFIG_EXT3_FS is not set
@@ -342,7 +360,7 @@ This patch applies cleanly to the following kernels:
 +# CONFIG_TMPFS_POSIX_ACL is not set
 +# CONFIG_HUGETLB_PAGE is not set
 +# CONFIG_CONFIGFS_FS is not set
-+# CONFIG_MISC_FILESYSTEMS is not set
++CONFIG_MISC_FILESYSTEMS=y
 +
 +#
 +# Partition Types

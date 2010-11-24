@@ -15,18 +15,21 @@ test "${0%/*}" != "$0" && cd "${0%/*}"
 test -f busybox
 BUSYBOX_KB=$(ls -l busybox.mini | ./busybox awk '{printf "%d", (($5+1024)/1024)}')
 test "$BUSYBOX_KB"
-let EXT2_KB=303+BUSYBOX_KB
-let BYTES_PER_INODE=3\*EXT2_KB
+let MINIX_KB=60+BUSYBOX_KB
 
-rm -f uevalrun.rootfs.mini.ext2.img  # Make sure it's not mounted.
-./busybox dd if=/dev/zero of=uevalrun.rootfs.mini.ext2.img bs=${EXT2_KB}K count=1
-./busybox mkfs.ext2 -i "$BYTES_PER_INODE" -F uevalrun.rootfs.mini.ext2.img
+rm -f uevalrun.rootfs.mini.minix.img  # Make sure it's not mounted.
+./busybox dd if=/dev/zero of=uevalrun.rootfs.mini.minix.img bs=${MINIX_KB}K count=1
+chmod 644 uevalrun.rootfs.mini.minix.img
+test "$SUDO_USER" && sudo chown "$SUDO_USER" uevalrun.rootfs.mini.minix.img
+# Increase `-i 40' here to increase the file size limit if you get a
+# `No space left on device' when running this script.
+./busybox mkfs.minix -n 14 -i 40 uevalrun.rootfs.mini.minix.img
 
 test "$EUID" = 0
 umount rp || true
 rm -rf rp
 mkdir -p rp
-mount -o loop uevalrun.rootfs.mini.ext2.img rp
+mount -o loop uevalrun.rootfs.mini.minix.img rp
 mkdir rp/{dev,bin,sbin,proc,fs}
 cp -a /dev/console rp/dev/
 cp -a /dev/ttyS0 rp/dev/

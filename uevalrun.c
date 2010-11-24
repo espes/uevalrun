@@ -15,6 +15,8 @@
  * GNU General Public License for more details.
  *
  * TODO(pts): don't lock the block devices in UML (read-only)
+ * TODO(pts): move auxilary files like *-config to another dir
+ * TODO(pts): build our binaries with our cross-compiler
  * * we have to set: CONFIG_HIGH_RES_TIMERS=y
  *   to avoid this kernel syslog message: Switched to NOHz mode on CPU #0
  */

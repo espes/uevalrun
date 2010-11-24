@@ -1,5 +1,6 @@
 #! /bin/bash --
 set -ex
+test "${0%/*}" != "$0" && cd "${0%/*}"
 if i386-uclibc-gcc -v >/dev/null 2>&1; then
   CC='i386-uclibc-gcc -static'
 else
@@ -7,4 +8,8 @@ else
 fi
 $CC -W -Wall -s -O2 -static -o xcat xcat.c
 make -C ..
-../uevalrun -M 32 -T 3 -E 20 -s xcat -t answer.in -e answer.exp
+if test "$#" = 1; then
+  ../uevalrun -M 32 -T 3 -E 20 -s xcat -t answer.in -e answer.bad.exp
+else
+  ../uevalrun -M 32 -T 3 -E 20 -s xcat -t answer.in -e answer.exp
+fi

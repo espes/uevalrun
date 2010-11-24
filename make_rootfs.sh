@@ -25,8 +25,8 @@ cat >mkroot.tmp.sh <<'ENDMKROOT'
 # thus we'll get a nonzero exit code in the UML host if this script fails.
 #trap /sbin/halt EXIT
 set -ex
-echo "Hello, Worldd!"
-mount /dev/ubdb /fs -t minix
+echo "Hello, World!"
+#ls /proc  # Works.
 
 mkdir /fs/dev /fs/bin /fs/sbin /fs/proc /fs/etc
 mkdir /fs/etc/init.d
@@ -75,7 +75,6 @@ ln -s ../bin/busybox /fs/bin/cat
 ln -s ../bin/busybox /fs/bin/vi
 ln -s ../bin/busybox /fs/bin/stty
 
-umount /fs
 : guest-creator script OK, halting.
 /sbin/halt
 ENDMKROOT

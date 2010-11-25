@@ -54,6 +54,11 @@ mknod /fs/dev/ubdd b 98 48
 chmod 711 /fs/dev/ubdb
 chmod 600 /fs/dev/ubdc
 chmod 700 /fs/dev/ubdd
+mknod /fs/dev/random c 1 8
+chmod 666 /fs/dev/random
+mknod /fs/dev/urandom c 1 9
+chmod 666 /fs/dev/urandom
+
 (cd /fs && tar xf /dev/ubdd)  # creates /fs/busybox
 mv /fs/busybox /fs/bin/busybox
 # cp hello bincat /fs/bin  # Custom binaries.

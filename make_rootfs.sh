@@ -7,19 +7,22 @@ set -ex
 
 test "${0%/*}" != "$0" && cd "${0%/*}"
 
+# Make sure we fail unless weuse ./busybox for all non-built-in commands.
+export PATH=/dev/null
+
 test -f busybox
 BUSYBOX_KB=$(./busybox ls -l busybox | ./busybox awk '{printf "%d", (($5+1024)/1024)}')
 test "$BUSYBOX_KB"
 let MINIX_KB=60+BUSYBOX_KB
 
-rm -f uevalrun.rootfs.minix.img  # Make sure it's not mounted.
+./busybox rm -f uevalrun.rootfs.minix.img  # Make sure it's not mounted.
 ./busybox dd if=/dev/zero of=uevalrun.rootfs.minix.img bs=${MINIX_KB}K count=1
 # Increase `-i 100' here to increase the file size limit if you get a
 # `No space left on device' when running this script.
 ./busybox mkfs.minix -n 14 -i 100 uevalrun.rootfs.minix.img
 
 ./busybox tar cvf mkroot.tmp.tar busybox
-cat >mkroot.tmp.sh <<'ENDMKROOT'
+./busybox cat >mkroot.tmp.sh <<'ENDMKROOT'
 #! /bin/sh
 # Don't autorun /sbin/minihalt, so we'll get a kernel panic in the UML guest,
 # thus we'll get a nonzero exit code in the UML host if this script fails.
@@ -84,6 +87,6 @@ ENDMKROOT
 ./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=10M \
     ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.minix.img \
     ubdc=mkroot.tmp.sh ubdd=mkroot.tmp.tar init=/sbin/minihalt
-rm -f mkroot.tmp.sh mkroot.tmp.tar
+./busybox rm -f mkroot.tmp.sh mkroot.tmp.tar
 
 : make_rootfs.sh OK.

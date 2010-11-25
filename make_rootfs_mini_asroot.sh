@@ -26,13 +26,14 @@ let MINIX_KB=60+BUSYBOX_KB
 ./busybox rm -f uevalrun.rootfs.mini.minix.img  # Make sure it's not mounted.
 ./busybox dd if=/dev/zero of=uevalrun.rootfs.mini.minix.img bs=${MINIX_KB}K count=1
 ./busybox chmod 644 uevalrun.rootfs.mini.minix.img
-test "$SUDO_USER" && ./busybox chown "$SUDO_USER" uevalrun.rootfs.mini.minix.img
+test "$SUDO_USER" && ./busybox chown "$SUDO_USER" uevalrun.rootfs.mini.minix.img || /bin/chown "$SUDO_USER" uevalrun.rootfs.mini.minix.img
 # Increase `-i 40' here to increase the file size limit if you get a
 # `No space left on device' when running this script.
 ./busybox mkfs.minix -n 14 -i 40 uevalrun.rootfs.mini.minix.img
 
 # In ./busybox sh, "$EUID" is 0.
 test -z "$EUID" || test "$EUID" = 0
+./busybox modprobe minix || true
 ./busybox umount rp || true
 ./busybox rm -rf rp
 ./busybox mkdir -p rp

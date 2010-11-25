@@ -23,7 +23,7 @@ let MINIX_KB=60+BUSYBOX_KB
 test -f uevalrun.rootfs.mini.minix.img ||
     svn revert uevalrun.rootfs.mini.minix.img
 test -e minihalt ||
-    cp precompiled/minihalt minihalt
+    ./busybox cp precompiled/minihalt minihalt
 
 ./busybox rm -f uevalrun.rootfs.newmini.minix.img  # Make sure it's not mounted.
 ./busybox dd if=/dev/zero of=uevalrun.rootfs.newmini.minix.img bs=${MINIX_KB}K count=1

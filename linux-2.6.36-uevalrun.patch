@@ -1285,7 +1285,7 @@ This patch applies cleanly to the following kernels:
  #include "user.h"
  
 -#define UML_DIR "~/.uml/"
-+/* !! why is make_uml_dir called with the defaults? -- disabled anyway because of strange effect on getenv("HOME") upon UML process exit */
++/* TODO(pts): why is make_uml_dir called with the defaults? -- disabled anyway because of strange effect on getenv("HOME") upon UML process exit */
 +#define UML_DIR "-~/.uml/"
  
  #define UMID_LEN 64

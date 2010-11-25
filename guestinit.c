@@ -64,10 +64,11 @@ static int work() {
   pid_t child;
   int status, fd, got, rgot, wbufi, wbufl, nullfd;
   int pinfds[2], poutfds[2];
-  char *p;
+  char *p, *q;
   char* env[] = { NULL };
-  char* args[] = { "/bin/ubdb", NULL };
-  
+  char* args[6];
+  char is_ruby19 = 0;
+
   if (0 == tcgetattr(1, &ti)) {  /* Almost always true. */
     /* Don't convert \n to \n when printing. */
     ti.c_oflag &= ~ONLCR;
@@ -89,8 +90,68 @@ static int work() {
     fprintf(stderr, "guestinit: setregid() failed\n");
     return 1;
   }
+
+  if (0 > (fd = open("/proc/cmdline", O_RDONLY))) {  /* command to run */
+    fprintf(stderr, "guestinit: open(/proc/cmdline) failed: %s\n",
+            strerror(errno));
+    return 1;
+  }
+  wbuf[0] = ' ';
+  wbufl = 1;
+  while (wbufl + 0U < sizeof wbuf - 1) {
+    got = read(fd, wbuf + wbufl, sizeof wbuf - 1 - wbufl);
+    if (got < 0) {
+      fprintf(stderr, "guestinit: read(/dev/ubde) failed: %s\n",
+                      strerror(errno));
+      return 1;
+    }
+    if (got == 0)
+      break;
+    wbufl += got;
+  }
+  close(fd);
+  wbuf[wbufl] = '\0';
+
+  p = strstr(wbuf, " solution_format=");
+  if (p == NULL) {
+    fprintf(stderr, "guestinit: missing solution_format=");
+    return 1;
+  }
+  p += sizeof(" solution_format=") - 1;
+  q = p;
+  while (*q != '\0' && *q != ' ' && *q != '\n' && *q != '\t')
+    ++q;
+  *q = '\0';
+
+  if (0 == strcmp(p, "elf")) {
+    args[0] = "/dev/ubdb";
+    args[1] = NULL;
+  } else if (0 == strcmp(p, "ruby1.8")) {
+    args[0] = "/bin/ruby1.8";
+    args[1] = "/dev/ubdb";
+    args[2] = NULL;
+  } else if (0 == strcmp(p, "ruby1.9")) {
+    is_ruby19 = 1;
+    args[0] = "/bin/ruby1.9";
+    args[1] = "/dev/ubdb";
+    args[2] = NULL;
+  } else if (0 == strcmp(p, "ruby")) {
+    args[0] = "/bin/ruby";
+    args[1] = "/dev/ubdb";
+    args[2] = NULL;
+  } else if (0 == strcmp(p, "python")) {
+    args[0] = "/bin/python";
+    args[1] = "-c";
+    /* Doesn't work (SyntaxError) directly as /bin/python /dev/ubdb */
+    args[2] = "exec(open('/dev/ubdb'))";
+    args[3] = NULL;
+  } else {
+    fprintf(stderr, "guestinit: unknown solution_format: %s\n", p);
+    return 1;
+  }
+
   /* SUXX: UML pads the file with '\0' to 512-byte block boundary. */
-  if (0 > (fd = open("/dev/ubdc", O_RDONLY))) {
+  if (0 > (fd = open("/dev/ubdc", O_RDONLY))) {  /* input */
     fprintf(stderr, "guestinit: open(/dev/ubdc) failed: %s\n", strerror(errno));
     return 1;
   }
@@ -162,6 +223,8 @@ static int work() {
       fprintf(stderr, "guestinit: child: setreuid() failed\n");
       exit(124);
     }
+    /* TODO(pts): Don't hide stderr for Ruby and Python -- maybe pipe? */
+#if 0
     if (nullfd != 2) {
       if (2 != dup2(nullfd, 2)) {
         fprintf(stderr, "guestinit: child: dup2() for nullfd failed: %s\n",
@@ -170,6 +233,7 @@ static int work() {
       }
       close(nullfd);
     }
+#endif
     rl.rlim_cur = 0;
     rl.rlim_max = 0;
     setrlimit(RLIMIT_CORE, &rl);
@@ -188,13 +252,13 @@ static int work() {
     rl.rlim_cur = 10;
     rl.rlim_max = 10;
     setrlimit(RLIMIT_NOFILE, &rl);
-    rl.rlim_cur = 0;
-    rl.rlim_max = 0;
+    /* ruby1.9 needs 3 processes for its timer thread */
+    rl.rlim_max = rl.rlim_cur = is_ruby19 ? 3 : 0;
     setrlimit(RLIMIT_NPROC, &rl);
     rl.rlim_cur = RLIM_INFINITY;
     rl.rlim_max = RLIM_INFINITY;
     setrlimit(RLIMIT_STACK, &rl);
-    status = execve("/dev/ubdb", args, env);
+    status = execve(args[0], args, env);
     /* Can't report this, stderr is already closed::
      * fprintf(stderr, "execve() failed (%d): %s\n", status, strerror(errno));
      */

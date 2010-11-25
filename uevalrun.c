@@ -14,6 +14,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * TODO(pts): Restore terminal state after a failed UML run (kernel panic).
  * TODO(pts): Make the `halt' command work in `make run_mini_sys'
  * TODO(pts): don't lock the block devices in UML (read-only)
  * TODO(pts): move auxilary files like *-config to another dir
@@ -79,6 +80,21 @@ static char *xslice(const char *s, size_t slen) {
   return t;
 }
 
+/* Example command: "python", "ruby", "ruby1.8", "ruby1.9" */
+static char shebang_has_command(const char *shebang, const char *command) {
+  const char *p = shebang;
+  int command_size = strlen(command);
+  while (1) {
+    while (*p != ' ' && *p !='\t' && *p != '/' && *p != '\0' && *p != '\n')
+      ++p;
+    if (*p == '\0' || *p == '\n')
+      return 0;
+    ++p;
+    if (0 == strncmp(p, command, command_size))
+      return 1;
+  }
+}
+
 static void usage(const char* argv0) {
   printf("@ info: usage: %s -M <mem_mb> -T <timeout> "
          "-E <excess_answer_limit_kb> -s <solution_binary> "
@@ -86,6 +102,8 @@ static void usage(const char* argv0) {
 }
 
 int main(int argc, char** argv) {
+  char hdr[128];  /* Should be at least 52, for reading ELF */
+  int hdr_size;
   char mismatch_msg[128];
   char state;
   int pfd[2];
@@ -101,6 +119,7 @@ int main(int argc, char** argv) {
   char *uml_linux_path;
   char *uml_rootfs_path;
   char *guestinit_path;
+  char *solution_format;
 
   int mem_mb = -1; /* -M */
   int timeout = -1;  /* -T */
@@ -218,62 +237,64 @@ int main(int argc, char** argv) {
             strerror(errno));
     return 2;
   }
-  { char elf_hdr[52];  /* Only applies to 32-bit ELF files */
+  memset(hdr, '\0', sizeof hdr);
+  if (0 > (hdr_size = fread(hdr, 1, sizeof hdr - 1, f))) {
+    printf("@ error: cannot read from solution binary: %s: %s\n",
+           solution_binary, strerror(errno));
+    return 2;
+  }
+  hdr[hdr_size] = '\0';
+  if (hdr_size >= 4 && 0 == memcmp(hdr, "\177ELF", 4)) {
     unsigned char *u;
     unsigned long sh_ofs;  /* Section header table offset */
     unsigned long flags;
     unsigned long long total_memsize;
     int sh_entsize;  /* Section header table entry size */
     int sh_num;  /* Section header table entry count */
-    if (52 != fread(elf_hdr, 1, 52, f)) {
+    if (hdr_size < 52) {
       printf("@ error: solution binary too small, cannot be ELF: %s\n",
              solution_binary);
       /* TODO(pts): fclose(f); fclose(fexp); everywhere */
       return 2;
     }
-    if (0 != memcmp(elf_hdr, "\177ELF", 4)) {
-      printf("@ error: solution binary not an ELF file (by magic): %s\n",
-             solution_binary);
-      return 2;
-    }
-    if (elf_hdr[4] != 1) {
+    if (hdr[4] != 1) {
       printf("@ error: solution binary not for 32-bit architecture: %s\n",
              solution_binary);
       return 2;
     }
-    if (elf_hdr[5] != 1) {
+    if (hdr[5] != 1) {
       printf("@ error: solution binary not for LSB architecture: %s\n",
              solution_binary);
       return 2;
     }
-    if (elf_hdr[16] != 2 || elf_hdr[17] != 0) {
+    if (hdr[16] != 2 || hdr[17] != 0) {
       printf("@ error: solution binary not an executable: %s\n",
              solution_binary);
       return 2;
     }
-    if (elf_hdr[18] != 3 || elf_hdr[19] != 0) {
+    if (hdr[18] != 3 || hdr[19] != 0) {
       printf("@ error: solution binary not for x86 architecture: %s\n",
              solution_binary);
       return 2;
     }
-    if (elf_hdr[20] != 1) {
+    if (hdr[20] != 1) {
       printf("@ error: solution binary not version 1: %s\n",
              solution_binary);
       return 2;
     }
-    if ((elf_hdr[7] != 0 && elf_hdr[7] != 3) || elf_hdr[8] != 0) {
+    if ((hdr[7] != 0 && hdr[7] != 3) || hdr[8] != 0) {
       printf("@ error: solution binary not for Linux: %s\n",
              solution_binary);
       return 2;
     }
-    u = (unsigned char*)elf_hdr + 32;
+    u = (unsigned char*)hdr + 32;
     sh_ofs = u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24);
-    u = (unsigned char*)elf_hdr + 46;
+    u = (unsigned char*)hdr + 46;
     sh_entsize = u[0] | (u[1] << 8);
     sh_num = u[2] | (u[3] << 8);
     printf("@ info: sh_ofs=%lu sh_entsize=%d sh_num=%d\n",
            sh_ofs, sh_entsize, sh_num);
-    if (sh_entsize + 0U > sizeof(elf_hdr)) {
+    if (sh_entsize + 0U > sizeof(hdr)) {
       printf("@ error: solution binary sh_entsize too large: %s: %d\n",
              solution_binary, sh_entsize);
       return 2;
@@ -290,16 +311,16 @@ int main(int argc, char** argv) {
     }
     total_memsize = 0;
     for (i = 0; i < sh_num; ++i) {
-      if (sh_entsize + 0U != fread(elf_hdr, 1, sh_entsize, f)) {
+      if (sh_entsize + 0U != fread(hdr, 1, sh_entsize, f)) {
         printf("@ error: cannot read section header in solution binary: "
                "%s: %d/%d: %s\n",
                solution_binary, i, sh_num, strerror(errno));
         return 2;
       }
-      u = (unsigned char*)elf_hdr + 8;
+      u = (unsigned char*)hdr + 8;
       flags = u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24);
       if ((flags & ELF_SHF_ALLOC) != 0) {
-        u = (unsigned char*)elf_hdr + 20;
+        u = (unsigned char*)hdr + 20;
         total_memsize += u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24);
       }
     }
@@ -314,6 +335,27 @@ int main(int argc, char** argv) {
     }
     printf("@ info: total_memsize=%ldM\n",
            (long)((total_memsize + ((1 << 20) - 1)) >> 20));
+    solution_format = "elf";
+  } else if (hdr[0] == '#' && hdr[1] == '!') {
+    if (shebang_has_command(hdr, "python")) {
+      /* Having \0 characters at the end of the file is OK */
+      solution_format = "python";
+    } else if (shebang_has_command(hdr, "ruby1.8")) {  /* Before "ruby". */
+      /* Having \0 characters at the end of the file is OK */
+      solution_format = "ruby1.8";
+    } else if (shebang_has_command(hdr, "ruby1.9")) {  /* Before "ruby". */
+      /* Having \0 characters at the end of the file is OK */
+      solution_format = "ruby1.9";
+    } else if (shebang_has_command(hdr, "ruby")) {
+      /* Having \0 characters at the end of the file is OK */
+      solution_format = "ruby";
+    } else {
+      printf("@ result: file format error: unknown shebang\n");
+      return 2;
+    }
+  } else {
+    printf("@ result: file format error: unknown file format\n");
+    return 3;
   }
   fclose(f);
 
@@ -365,6 +407,7 @@ int main(int argc, char** argv) {
    */
   args[i++] = xstrcat("ubdc=", test_input);
   args[i++] = xstrcat("ubdd=", guestinit_path);
+  args[i++] = xstrcat("solution_format=", solution_format);
   args[i++] = "init=/dev/ubdd";
   args[i] = NULL;
 

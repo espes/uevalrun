@@ -106,10 +106,11 @@ ln -s ../bin/busybox /fs/bin/yes
 /sbin/minihalt
 ENDMKROOT
 
-./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=10M \
+./uevalrun.linux.uml con=null ssl=null con0=fd:-1,fd:1 mem=10M \
     ubda=uevalrun.rootfs.mini.minix.img \
     ubdb=uevalrun.rootfs.newmini.minix.img \
-    ubdc=mkrootmini.tmp.sh ubdd=mkrootmini.tmp.tar init=/sbin/minihalt
+    ubdc=mkrootmini.tmp.sh ubdd=mkrootmini.tmp.tar init=/sbin/minihalt \
+    </dev/null
 ./busybox rm -f mkrootmini.tmp.sh mkrootmini.tmp.tar
 ./busybox mv -f uevalrun.rootfs.newmini.minix.img uevalrun.rootfs.mini.minix.img
 

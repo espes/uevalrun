@@ -11,17 +11,19 @@ test "${0%/*}" != "$0" && cd "${0%/*}"
 export PATH=/dev/null
 
 test -f busybox
-BUSYBOX_KB=$(./busybox ls -l busybox | ./busybox awk '{printf "%d", (($5+1024)/1024)}')
-test "$BUSYBOX_KB"
-let MINIX_KB=60+BUSYBOX_KB
+PROGS='busybox ruby-1.8 ruby-1.9 stackless2.7'
+PROGS_KB=$(./busybox ls -l $PROGS | ./busybox awk '{s+=(($5+1023)/1024)}END{printf"%d\n",s}')
+test "$PROGS_KB"
+# TODO(pts): Round more up.
+let MINIX_KB=70+PROGS_KB
 
 ./busybox rm -f uevalrun.rootfs.minix.img  # Make sure it's not mounted.
 ./busybox dd if=/dev/zero of=uevalrun.rootfs.minix.img bs=${MINIX_KB}K count=1
 # Increase `-i 100' here to increase the file size limit if you get a
 # `No space left on device' when running this script.
-./busybox mkfs.minix -n 14 -i 100 uevalrun.rootfs.minix.img
+./busybox mkfs.minix -n 14 -i 110 uevalrun.rootfs.minix.img
 
-./busybox tar cvf mkroot.tmp.tar busybox
+./busybox tar cvf mkroot.tmp.tar $PROGS
 ./busybox cat >mkroot.tmp.sh <<'ENDMKROOT'
 #! /bin/sh
 # Don't autorun /sbin/minihalt, so we'll get a kernel panic in the UML guest,
@@ -51,15 +53,24 @@ cp -a /dev/zero /fs/dev/
 mknod /fs/dev/ubdb b 98 16
 mknod /fs/dev/ubdc b 98 32
 mknod /fs/dev/ubdd b 98 48
-chmod 711 /fs/dev/ubdb
+mknod /fs/dev/ubde b 98 64
+# Grant read permission for the user: it migh be a script.
+chmod 755 /fs/dev/ubdb
 chmod 600 /fs/dev/ubdc
 chmod 700 /fs/dev/ubdd
+chmod 600 /fs/dev/ubde
 mknod /fs/dev/random c 1 8
 chmod 666 /fs/dev/random
 mknod /fs/dev/urandom c 1 9
 chmod 666 /fs/dev/urandom
 
-(cd /fs && tar xf /dev/ubdd)  # creates /fs/busybox
+(cd /fs && tar xf /dev/ubdd)  # creates /fs/busybox /fs/ruby1.8
+mv /fs/ruby-1.8 /fs/bin/ruby1.8
+ln -s ruby1.8 /fs/bin/ruby
+mv /fs/ruby-1.9 /fs/bin/ruby1.9
+mv /fs/stackless2.7 /fs/bin/stackless2.7
+ln -s stackless2.7 /fs/bin/python
+ln -s stackless2.7 /fs/bin/stackless
 mv /fs/busybox /fs/bin/busybox
 # cp hello bincat /fs/bin  # Custom binaries.
 ln -s ../bin/busybox /fs/sbin/init
@@ -89,9 +100,11 @@ ENDMKROOT
 
 # Use the minix driver in uevalrun.linux.uml to populate our rootfs
 # (uevalrun.rootfs.minix.img).
-./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=10M \
+# TODO(pts): Don't screw up the output TTY settinfs on kernel panic.
+./uevalrun.linux.uml con=null ssl=null con0=fd:-1,fd:1 mem=10M \
     ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.minix.img \
-    ubdc=mkroot.tmp.sh ubdd=mkroot.tmp.tar init=/sbin/minihalt
+    ubdc=mkroot.tmp.sh ubdd=mkroot.tmp.tar init=/sbin/minihalt \
+    </dev/null
 ./busybox rm -f mkroot.tmp.sh mkroot.tmp.tar
 
 : make_rootfs.sh OK.

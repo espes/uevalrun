@@ -1,7 +1,9 @@
 #! /bin/bash --
 set -ex
 test "${0%/*}" != "$0" && cd "${0%/*}"
-if i386-uclibc-gcc -v >/dev/null 2>&1; then
+if test "$CC"; then
+  :
+elif i386-uclibc-gcc -v >/dev/null 2>&1; then
   CC='i386-uclibc-gcc -static'
 else
   CC='gcc -static'

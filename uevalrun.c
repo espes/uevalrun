@@ -14,6 +14,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * TODO(pts): Make the `halt' command work in `make run_mini_sys'
  * TODO(pts): don't lock the block devices in UML (read-only)
  * TODO(pts): move auxilary files like *-config to another dir
  * TODO(pts): build our binaries with our cross-compiler

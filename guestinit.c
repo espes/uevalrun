@@ -143,6 +143,10 @@ static int work() {
     args[0] = "/bin/php";
     args[1] = "/dev/ubdb";
     args[2] = NULL;
+  } else if (0 == strcmp(p, "perl")) {
+    args[0] = "/bin/perl";
+    args[1] = "/dev/ubdb";
+    args[2] = NULL;
   } else if (0 == strcmp(p, "python")) {
     args[0] = "/bin/python";
     args[1] = "-c";

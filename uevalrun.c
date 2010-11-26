@@ -80,7 +80,7 @@ static char *xslice(const char *s, size_t slen) {
   return t;
 }
 
-/* Example command: "python", "php", "ruby", "ruby1.8", "ruby1.9" */
+/* Example command: "python", "php", "perl", "ruby", "ruby1.8", "ruby1.9" */
 static char shebang_has_command(const char *shebang, const char *command) {
   const char *p = shebang;
   int command_size = strlen(command);
@@ -352,6 +352,9 @@ int main(int argc, char** argv) {
     } else if (shebang_has_command(hdr, "php")) {
       /* Having \0 characters at the end of the file is OK */
       solution_format = "php";
+    } else if (shebang_has_command(hdr, "perl")) {
+      /* Having \0 characters at the end of the file is OK */
+      solution_format = "perl";
     } else {
       printf("@ result: file format error: unknown shebang\n");
       return 2;

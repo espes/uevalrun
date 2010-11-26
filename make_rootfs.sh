@@ -11,11 +11,11 @@ test "${0%/*}" != "$0" && cd "${0%/*}"
 export PATH=/dev/null
 
 test -f busybox
-PROGS='busybox ruby-1.8 ruby-1.9 stackless2.7'
+PROGS='busybox php-5.3.3 ruby-1.8 ruby-1.9 stackless2.7'
 PROGS_KB=$(./busybox ls -l $PROGS | ./busybox awk '{s+=(($5+1023)/1024)}END{printf"%d\n",s}')
 test "$PROGS_KB"
-# TODO(pts): Round more up.
-let MINIX_KB=70+PROGS_KB
+# TODO(pts): Give a better estimate.
+let MINIX_KB=10+PROGS_KB+PROGS_KB/256
 
 ./busybox rm -f uevalrun.rootfs.minix.img  # Make sure it's not mounted.
 ./busybox dd if=/dev/zero of=uevalrun.rootfs.minix.img bs=${MINIX_KB}K count=1
@@ -68,6 +68,7 @@ chmod 666 /fs/dev/urandom
 mv /fs/ruby-1.8 /fs/bin/ruby1.8
 ln -s ruby1.8 /fs/bin/ruby
 mv /fs/ruby-1.9 /fs/bin/ruby1.9
+mv /fs/php-5.3.3 /fs/bin/php
 mv /fs/stackless2.7 /fs/bin/stackless2.7
 ln -s stackless2.7 /fs/bin/python
 ln -s stackless2.7 /fs/bin/stackless

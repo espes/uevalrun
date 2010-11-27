@@ -44,26 +44,68 @@ static void done(int exitcode) {
   reboot(RB_HALT_SYSTEM);
 }
 
-static void do_sigchld(int signum) {
-  (void)signum;
-}
-
 static char rbuf[16 + 8192 + 1];
 static char wbuf[8192];
 
+static pid_t child;
+static int status;
+
+/** Returns 0 on success; -EINTR */
+static int copy_output(int outfd, char which, char *done_flag) {
+  int got = read(outfd, rbuf + 16, sizeof(rbuf) - 16);
+  int rgot;
+  char *p;
+  if (0 > got) {
+    if (errno == EINTR) {
+      return 0;
+    } else {
+      fprintf(stderr, "guestinit: %s read failed: %s\n",
+              which == STDOUT_FILENO ? "stdout" : "stderr",
+              strerror(errno));
+      return 1;
+    }
+  }
+  if (0 == got) {
+    *done_flag = 1;
+  } else {
+    rgot = got;
+    p = rbuf + 16;
+    *--p = which == STDOUT_FILENO ? '>' : '!';
+    do {
+      *--p = rgot % 10 + '0';
+      rgot /= 10;
+    } while (rgot > 0);
+    rgot = got + (rbuf + 16 - p);
+    if (p[rgot - 1] != '\n')
+      p[rgot++] = '\n';
+    while (rgot > 0) {
+      /* We don't care if this operation is blocking. */
+      got = write(1, p, rgot);
+      if (0 > got) {
+        if (errno != EINTR) {
+          fprintf(stderr, "guestinit: output write failed: %s\n", strerror(errno));
+          return 1;
+        }
+      } else {
+        p += got;
+        rgot -= got;
+      }
+    }
+  }
+  return 0;
+}
+
 /** @return is_success? */
 static int work() {
-  struct sigaction sa;
   struct rlimit rl;
   fd_set rset;
   fd_set wset;
   int maxfd;
-  char is_child_done, is_output_done, is_input_done;
+  char is_stdout_done, is_stderr_done, is_input_done;
   uint64_t fs, fsw;
   struct termios ti;
-  pid_t child;
-  int status, fd, got, rgot, wbufi, wbufl, nullfd;
-  int pinfds[2], poutfds[2];
+  int fd, got, wbufi, wbufl;
+  int pinfds[2], pstdoutfds[2], pstderrfds[2];
   char *p, *q;
   char* env[] = { NULL };
   char* args[6];
@@ -173,12 +215,12 @@ static int work() {
     fprintf(stderr, "guestinit: input pipe creation failed: %s\n", strerror(errno));
     return 1;
   }
-  if (0 != pipe(poutfds)) {
-    fprintf(stderr, "guestinit: output pipe creation failed: %s\n", strerror(errno));
+  if (0 != pipe(pstdoutfds)) {
+    fprintf(stderr, "guestinit: stdout pipe creation failed: %s\n", strerror(errno));
     return 1;
   }
-  if (0 > (nullfd = open("/dev/null", O_WRONLY))) {
-    fprintf(stderr, "guestinit: opening /dev/null failed: %s\n", strerror(errno));
+  if (0 != pipe(pstderrfds)) {
+    fprintf(stderr, "guestinit: stderr pipe creation failed: %s\n", strerror(errno));
     return 1;
   }
 
@@ -188,15 +230,6 @@ static int work() {
       return 1;
     }
     close(pinfds[0]);
-  }
-
-  memset(&sa, '\0', sizeof sa);
-  sa.sa_handler = do_sigchld;
-  sa.sa_flags = SA_NOCLDSTOP | SA_RESTART;
-  sigemptyset(&sa.sa_mask);
-  if (0 != sigaction(SIGCHLD, &sa, NULL)) {
-    fprintf(stderr, "guestinit: error setting up SIGCHLD handler: %s\n", strerror(errno));
-    return 1;
   }
 
   /* Not giving up root (setreuid) because we have to power off later. */
@@ -211,37 +244,26 @@ static int work() {
   if (child == 0) {  /* Child process. */
     close(fd);
     close(pinfds[1]);
-    close(poutfds[0]);
-    memset(&sa, '\0', sizeof sa);
-    sa.sa_handler = SIG_DFL;
-    sa.sa_flags = SA_NOCLDSTOP | SA_RESTART;
-    sigemptyset(&sa.sa_mask);
-    if (0 != sigaction(SIGCHLD, &sa, NULL)) {
-      fprintf(stderr, "guestinit: child: resetting SIGCHLD failed: %s\n", strerror(errno));
-      exit(124);
-    }
-    if (poutfds[1] != 1) {
-      if (1 != dup2(poutfds[1], 1)) {
-        fprintf(stderr, "guestinit: child: dup2() for output pipe failed: %s\n", strerror(errno));
+    close(pstdoutfds[0]);
+    close(pstderrfds[0]);
+    if (pstdoutfds[1] != 1) {
+      if (1 != dup2(pstdoutfds[1], 1)) {
+        fprintf(stderr, "guestinit: child: dup2() for stdout pipe failed: %s\n", strerror(errno));
         exit(124);
       }
-      close(poutfds[1]);
+      close(pstdoutfds[1]);
+    }
+    if (pstderrfds[1] != 2) {
+      if (2 != dup2(pstderrfds[1], 2)) {
+        fprintf(stderr, "guestinit: child: dup2() for stderr pipe failed: %s\n", strerror(errno));
+        exit(124);
+      }
+      close(pstderrfds[1]);
     }
     if (0 != setreuid(1000, 1000)) {
       fprintf(stderr, "guestinit: child: setreuid() failed\n");
       exit(124);
     }
-    /* TODO(pts): Don't hide stderr for Ruby and Python -- maybe pipe? */
-#if 0
-    if (nullfd != 2) {
-      if (2 != dup2(nullfd, 2)) {
-        fprintf(stderr, "guestinit: child: dup2() for nullfd failed: %s\n",
-                strerror(errno));
-        exit(124);
-      }
-      close(nullfd);
-    }
-#endif
     rl.rlim_cur = 0;
     rl.rlim_max = 0;
     setrlimit(RLIMIT_CORE, &rl);
@@ -273,8 +295,8 @@ static int work() {
     exit(125);  /* End of child process. */
   }
   close(0);
-  close(poutfds[1]);
-  close(nullfd);
+  close(pstdoutfds[1]);
+  close(pstderrfds[1]);
 
   /* Copy from fd (input file) to pinfds[1] (writable end of pipe input) */
   if (fs == 0) {
@@ -284,25 +306,25 @@ static int work() {
   } else {
     is_input_done = 0;
   }
-  is_output_done = 0;
-  is_child_done = 0;
-  maxfd = (fd > poutfds[0] ? fd : poutfds[0]) + 1;
+  is_stdout_done = 0;
+  is_stderr_done = 0;
+  maxfd = fd > pstdoutfds[0] ? fd : pstdoutfds[0];
+  if (pstderrfds[0] > maxfd) maxfd = pstderrfds[0];
+  ++maxfd;
   wbufi = wbufl = 0;
   fsw = fs;
-  while (!(is_input_done && is_output_done)) {
+  while (!(is_input_done && is_stdout_done)) {
     /* TODO(pts): Use poll to make it faster */
     FD_ZERO(&wset);
     if (!is_input_done)
       FD_SET(pinfds[1], &wset);
     FD_ZERO(&rset);
-    if (!is_output_done)
-      FD_SET(poutfds[0], &rset);
+    if (!is_stdout_done)
+      FD_SET(pstdoutfds[0], &rset);
+    if (!is_stderr_done)
+      FD_SET(pstderrfds[0], &rset);
     if (select(maxfd, &rset, &wset, NULL, NULL) == -1) {
       if (errno == EINTR) {
-        if (child == waitpid(child, &status, WNOHANG)) {
-          is_child_done = 1;
-          break;
-        }
         continue;
       }
       fprintf(stderr, "guestinit: select() failed: %s\n", strerror(errno));
@@ -318,100 +340,58 @@ static int work() {
         wbufi = 0;
         got = read(fd, wbuf, fs > sizeof wbuf ? sizeof wbuf : fs);
         if (0 > got) {
-          if (errno == EINTR) {
-            if (child == waitpid(child, &status, WNOHANG)) {
-              is_child_done = 1;
-              break;
-            }
-            continue;
+          if (errno != EINTR) {
+            fprintf(stderr, "guestinit: input read failed: %s\n", strerror(errno));
+            return 1;
           }
-          fprintf(stderr, "guestinit: input read failed: %s\n", strerror(errno));
-          return 1;
+        } else {
+          if (0 == got) {
+            fprintf(stderr, "guestinit: input EOF too early, need more: %ld\n", (long)fs);
+            return 1;
+          }
+          wbufl = got;
+          fs -= got;
+          if (fs == 0)
+            close(fd);
         }
-        if (0 == got) {
-          fprintf(stderr, "guestinit: input EOF too early, need more: %ld\n", (long)fs);
-          return 1;
-        }
-        wbufl = got;
-        fs -= got;
-        if (fs == 0)
-          close(fd);
       }
       got = write(pinfds[1], wbuf + wbufi, wbufl - wbufi);
       if (0 > got) {
-        if (errno == EINTR) {
-          if (child == waitpid(child, &status, WNOHANG)) {
-            is_child_done = 1;
-            break;
-          }
-          continue;
+        if (errno != EINTR) {
+          fprintf(stderr, "guestinit: input pipe write failed: %s\n",
+                  strerror(errno));
+          return 1;
         }
-        fprintf(stderr, "guestinit: input pipe write failed: %s\n",
-                strerror(errno));
-        return 1;
-      }
-      wbufi += got;
-      fsw -= got;
-      if (fsw == 0) {
-        is_input_done = 1;
-        close(pinfds[1]);
+      } else {
+        wbufi += got;
+        fsw -= got;
+        if (fsw == 0) {
+          is_input_done = 1;
+          close(pinfds[1]);
+        }
       }
     }
-    if (FD_ISSET(poutfds[0], &rset)) {
-      got = read(poutfds[0], rbuf + 16, sizeof(rbuf) - 16);
-      if (0 > got) {
-        if (errno == EINTR) {
-          if (child == waitpid(child, &status, WNOHANG)) {
-            is_child_done = 1;
-            break;
-          }
-          continue;
-        }
-        fprintf(stderr, "guestinit: output read failed: %s\n", strerror(errno));
-        return 1;
-      }
-      if (0 == got) {
-        is_output_done = 1;
-      } else {
-        rgot = got;
-        p = rbuf + 16;
-        *--p = '>';
-        do {
-          *--p = rgot % 10 + '0';
-          rgot /= 10;
-        } while (rgot > 0);
-        rgot = got + (rbuf + 16 - p);
-        if (p[rgot - 1] != '\n')
-          p[rgot++] = '\n';
-        while (rgot > 0) {
-          /* We don't care if this operation is blocking. */
-          got = write(1, p, rgot);
-          if (0 > got) {
-            if (errno == EINTR) {
-              if (child == waitpid(child, &status, WNOHANG)) {
-                is_child_done = 1;
-                break;
-              }
-              continue;
-            }
-            fprintf(stderr, "guestinit: output write failed: %s\n", strerror(errno));
-            return 1;
-          }
-          p += got;
-          rgot -= got;
-        }
-        if (is_child_done)
-          break;
-      }
+    /* Process pstderr first, to notice the closing of pstdout later, so an error
+     * message can be printed earler.
+     */
+    if (FD_ISSET(pstderrfds[0], &rset)) {
+      if (0 != (got = copy_output(pstderrfds[0], STDERR_FILENO, &is_stderr_done)))
+        return got;
+    }
+    if (FD_ISSET(pstdoutfds[0], &rset)) {
+      if (0 != (got = copy_output(pstdoutfds[0], STDOUT_FILENO, &is_stdout_done)))
+        return got;
     }
   }
   close(fd);
   close(pinfds[1]);
-  close(poutfds[0]);
-  if (!is_child_done) {
-    while (child != waitpid(child, &status, 0)) {}
-    is_child_done = 1;
-  }
+  close(pstdoutfds[0]);
+  close(pstderrfds[0]);
+  /* We wait only this late (even for other processes closing the pipe) to
+   * avoid the race condition between SIGCHLD and reading the output of the
+   * child.
+   */
+  while (child != waitpid(child, &status, 0)) {}
   if (status != 0) {
     fprintf(stderr, "\nguestinit: solution child failed with status=0x%x.\n", status);
     if (WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL) {

@@ -1,4 +1,6 @@
 #! ruby1.9
+$stderr.sync = true
 puts 'Hi!'
-$stdout << "Hello, World!\n"
-
+$stderr << "error1\n"
+$stdout << "Hello, Ruby World!\n"
+$stderr << "error2\n"

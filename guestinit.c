@@ -313,7 +313,7 @@ static int work() {
   ++maxfd;
   wbufi = wbufl = 0;
   fsw = fs;
-  while (!(is_input_done && is_stdout_done)) {
+  while (!(is_input_done && is_stdout_done && is_stderr_done)) {
     /* TODO(pts): Use poll to make it faster */
     FD_ZERO(&wset);
     if (!is_input_done)
@@ -371,9 +371,7 @@ static int work() {
         }
       }
     }
-    /* Process pstderr first, to notice the closing of pstdout later, so an error
-     * message can be printed earler.
-     */
+    /* Process pstderr first. */
     if (FD_ISSET(pstderrfds[0], &rset)) {
       if (0 != (got = copy_output(pstderrfds[0], STDERR_FILENO, &is_stderr_done)))
         return got;
@@ -389,7 +387,7 @@ static int work() {
   close(pstderrfds[0]);
   /* We wait only this late (even for other processes closing the pipe) to
    * avoid the race condition between SIGCHLD and reading the output of the
-   * child.
+   * child. We still won't receive the last few error messages.
    */
   while (child != waitpid(child, &status, 0)) {}
   if (status != 0) {

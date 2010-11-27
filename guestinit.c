@@ -36,6 +36,8 @@ static void done(int exitcode) {
     fprintf(stderr, "guestinit: failure, exitcode=%d\n", exitcode);
   fflush(stdout);
   fflush(stderr);
+  /* Make sure that con0 (/dev/tty0) is flushed to the UML host. */
+  tcdrain(1);
   sync();
   /* RB_POWER_OFF: System halted., because no power management in UML */
   /* RB_HALT_SYSTEM: System halted. */

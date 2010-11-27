@@ -16,6 +16,7 @@
 /* TODO(pts): Make this binary smaller by writing assembly code. */
 #include <sys/mount.h>
 #include <sys/reboot.h>
+#include <termios.h>
 #include <unistd.h>
 
 #define ERRMSG(msg) write(2, msg, sizeof msg - 1)
@@ -38,6 +39,8 @@ int main(int argc, char **argv, char **environ) {
     ERRMSG("minihalt: failed: umount /fs\n");
     return 2;
   }
+  /* Make sure that con0 (/dev/tty0) is flushed to the UML host. */
+  tcdrain(1);
   sync();
   return reboot(RB_HALT_SYSTEM);
 }

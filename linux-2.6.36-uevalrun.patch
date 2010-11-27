@@ -451,9 +451,69 @@ This patch applies cleanly to the following kernels:
  endef
  
  # When cleaning we don't include .config, so we don't include
+--- linux-2.6.36.orig/arch/um/os-Linux/util.c	2010-10-20 22:30:22.000000000 +0200
++++ linux-2.6.36/arch/um/os-Linux/util.c	2010-11-21 19:35:30.000000000 +0100
+@@ -68,24 +68,31 @@
+ 
+ void setup_hostinfo(char *buf, int len)
+ {
+ 	struct utsname host;
+ 
+ 	uname(&host);
+ 	snprintf(buf, len, "%s %s %s %s %s", host.sysname, host.nodename,
+ 		 host.release, host.version, host.machine);
+ }
+ 
++
+ void os_dump_core(void)
+ {
+ 	int pid;
+ 
++	/* Call tcsetattr to restore termios of con=fd:... devices */
++	/* TODO(pts): Also restore ssl= */
++	/* TODO(pts): Only restore fd: */
++        extern void console_exit(void);
++	console_exit();
++
+ 	signal(SIGSEGV, SIG_DFL);
+ 
+ 	/*
+ 	 * We are about to SIGTERM this entire process group to ensure that
+ 	 * nothing is around to run after the kernel exits.  The
+ 	 * kernel wants to abort, not die through SIGTERM, so we
+ 	 * ignore it here.
+ 	 */
+ 
+ 	signal(SIGTERM, SIG_IGN);
+
+--- linux-2.6.36.orig/arch/um/drivers/stdio_console.c	2010-10-20 22:30:22.000000000 +0200
++++ linux-2.6.36/arch/um/drivers/stdio_console.c	2010-11-21 19:35:30.000000000 +0100
+@@ -173,21 +173,21 @@
+ 		opts.xterm_title = new_title;
+ 
+ 	lines_init(vts, ARRAY_SIZE(vts), &opts);
+ 
+ 	con_init_done = 1;
+ 	register_console(&stdiocons);
+ 	return 0;
+ }
+ late_initcall(stdio_init);
+ 
+-static void console_exit(void)
++void console_exit(void)
+ {
+ 	if (!con_init_done)
+ 		return;
+ 	close_lines(vts, ARRAY_SIZE(vts));
+ }
+ __uml_exitcall(console_exit);
+ 
+ static int console_chan_setup(char *str)
+ {
+ 	char *error;
 --- linux-2.6.36.orig/arch/um/drivers/fd.c	2010-10-20 22:30:22.000000000 +0200
 +++ linux-2.6.36/arch/um/drivers/fd.c	2010-11-21 19:35:30.000000000 +0100
-@@ -1,20 +1,22 @@
+@@ -1,29 +1,31 @@
  /*
   * Copyright (C) 2001 - 2007 Jeff Dike (jdike@{linux.intel,addtoit}.com)
   * Licensed under the GPL
@@ -474,16 +534,32 @@ This patch applies cleanly to the following kernels:
  
  struct fd_chan {
  	int fd;
- 	int raw;
+-	int raw;
++	char raw, is_tty;
  	struct termios tt;
-@@ -42,25 +44,72 @@
+ 	char str[sizeof("1234567890\0")];
+ };
+ 
+ static void *fd_init(char *str, int device, const struct chan_opts *opts)
+ {
+ 	struct fd_chan *data;
+ 	char *end;
+ 	int n;
+ 
+@@ -38,49 +40,99 @@
+ 		printk(UM_KERN_ERR "fd_init : couldn't parse file descriptor "
+ 		       "'%s'\n", str);
+ 		return NULL;
+ 	}
  
  	data = uml_kmalloc(sizeof(*data), UM_GFP_KERNEL);
  	if (data == NULL)
  		return NULL;
  
  	*data = ((struct fd_chan) { .fd  	= n,
- 				    .raw  	= opts->raw });
+-				    .raw  	= opts->raw });
++				    .raw  	= opts->raw,
++				    .is_tty     = 0 });
  	return data;
  }
  
@@ -528,27 +604,56 @@ This patch applies cleanly to the following kernels:
  	struct fd_chan *data = d;
  	int err;
  
+-	if (data->raw && isatty(data->fd)) {
+-		CATCH_EINTR(err = tcgetattr(data->fd, &data->tt));
+-		if (err)
 +	if (data->fd == -1) {
 +		int master_fd, slave_fd;
 +		err = create_pty_pair(&master_fd, &slave_fd);
 +		if (err) {
 +			printk(UM_KERN_ERR "Cannot crete PTY pair (%d)\n", err);
-+			return err;
+ 			return err;
 +		}
 +		/* TODO(pts): Close the master eventually. */
 +		data->fd = slave_fd;
 +	}
-+
- 	if (data->raw && isatty(data->fd)) {
- 		CATCH_EINTR(err = tcgetattr(data->fd, &data->tt));
- 		if (err)
- 			return err;
  
- 		err = raw(data->fd);
- 		if (err)
- 			return err;
+-		err = raw(data->fd);
+-		if (err)
+-			return err;
++	if (data->raw) {
++		CATCH_EINTR(err = tcgetattr(data->fd, &data->tt));
++		if (!err || (errno != ENOTTY && errno != EINVAL)) {
++			if (err)
++				return -errno;
++			data->is_tty = 1;
++			err = raw(data->fd);
++			if (err)
++				return err;
++		}
  	}
  	sprintf(data->str, "%d", data->fd);
+ 	*dev_out = data->str;
+ 	return data->fd;
+ }
+ 
+ static void fd_close(int fd, void *d)
+ {
+ 	struct fd_chan *data = d;
+ 	int err;
+ 
+-	if (!data->raw || !isatty(fd))
++	if (!data->is_tty)
+ 		return;
+ 
+ 	CATCH_EINTR(err = tcsetattr(fd, TCSAFLUSH, &data->tt));
+ 	if (err)
+ 		printk(UM_KERN_ERR "Failed to restore terminal state - "
+ 		       "errno = %d\n", -err);
+ 	data->raw = 0;
+ }
+ 
+ const struct chan_ops fd_ops = {
 --- linux-2.6.36.orig/arch/um/drivers/ubd_kern.c	2010-10-20 22:30:22.000000000 +0200
 +++ linux-2.6.36/arch/um/drivers/ubd_kern.c	2010-11-21 17:45:19.000000000 +0100
 @@ -833,42 +833,40 @@
@@ -1444,32 +1549,6 @@ This patch applies cleanly to the following kernels:
 +EXPORT_SYMBOL(memscan);
 +#endif
 +
---- linux-2.6.36.orig/diff.list	1970-01-01 01:00:00.000000000 +0100
-+++ linux-2.6.36/diff.list	2010-11-24 00:22:00.000000000 +0100
-@@ -0,0 +1,23 @@
-+.config
-+arch/um/Makefile
-+arch/um/drivers/chan_kern.c
-+arch/um/drivers/chan_user.c
-+arch/um/drivers/fd.c
-+arch/um/drivers/ubd_kern.c
-+arch/um/include/asm/string.h
-+arch/um/include/shared/kern_util.h
-+arch/um/kernel/reboot.c
-+arch/um/kernel/trap.c
-+arch/um/os-Linux/main.c
-+arch/um/os-Linux/skas/process.c
-+arch/um/os-Linux/start_up.c
-+arch/um/os-Linux/umid.c
-+arch/um/os-Linux/util.c
-+arch/x86/lib/string_32.c
-+diff.list
-+fs/block_dev.c
-+fs/exec.c
-+kernel/sys.c
-+lib/string.c
-+lib/vsprintf.c
-+scripts/mod/modpost.c
 --- linux-2.6.36.orig/fs/exec.c	2010-10-20 22:30:22.000000000 +0200
 +++ linux-2.6.36/fs/exec.c	2010-11-21 00:35:05.000000000 +0100
 @@ -685,25 +685,27 @@

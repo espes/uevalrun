@@ -22,7 +22,9 @@ let MINIX_KB=60+BUSYBOX_KB
 
 test -f uevalrun.rootfs.mini.minix.img ||
     svn revert uevalrun.rootfs.mini.minix.img
-test -e minihalt ||
+# TODO(pts): Autodetect the compiler, add paths etc.
+#./make minihalt ||
+test -f minihalt ||
     ./busybox cp precompiled/minihalt minihalt
 
 ./busybox rm -f uevalrun.rootfs.newmini.minix.img  # Make sure it's not mounted.
@@ -63,6 +65,7 @@ chmod 700 /fs/dev/ubdd
 (cd /fs && tar xf /dev/ubdd)  # creates /fs/busybox.mini and /fs/minihalt
 mv /fs/busybox.mini /fs/bin/busybox
 mv /fs/minihalt /fs/sbin/minihalt
+ln -s minihalt /fs/sbin/halt
 ln -s ../bin/busybox /fs/bin/[
 ln -s ../bin/busybox /fs/bin/[[
 ln -s ../bin/busybox /fs/bin/ash

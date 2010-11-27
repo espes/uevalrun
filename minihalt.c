@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
   */
 /* i386-uclibc-gcc -s -static -W -Wall -o minihalt minihalt.c */
-/* TODO(pts): Make this binary smaller by writing assembly code. */
+#include <errno.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <termios.h>
@@ -35,7 +35,8 @@ int main(int argc, char **argv, char **environ) {
     }
     return execve("/bin/sh", args, environ);
   }
-  if (0 != umount("/fs")) {
+  /* EINVAL is returned if /fs is not mounted */
+  if (0 != umount("/fs") && errno != EINVAL) {
     ERRMSG("minihalt: failed: umount /fs\n");
     return 2;
   }

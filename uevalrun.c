@@ -29,6 +29,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
+#include <sys/select.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -101,6 +102,74 @@ static void usage(const char* argv0) {
          "-t <test_input> -e <expected_output>\n", argv0);
 }
 
+/* --- Read buffering */
+
+/** Characters read from the stdout of the UML process */
+static char rbuf[8192];
+static int rbuf_fd;
+static char *rbuf_p, *rbuf_end;
+fd_set rbuf_rset;
+
+static void rbuf_init(int fd) {
+  long flags;
+  flags = fcntl(fd, F_GETFL);
+  if (flags < 0) {
+    printf("@ error: fcntl F_GETFL: %s\n", strerror(errno));
+    exit(2);
+  }
+  if (0 != fcntl(fd, F_SETFL, flags | O_NONBLOCK)) {
+    printf("@ error: fcntl F_SETFL: %s\n", strerror(errno));
+    exit(2);
+  }
+  rbuf_fd = fd;
+  rbuf_p = rbuf_end = rbuf;
+  FD_ZERO(&rbuf_rset);
+}
+
+/** @return -1 on EOF */
+static int rbuf_getc_heavy() {
+  int got;
+  if (rbuf_p == NULL)
+    return -1;  /* EOF */
+  if (rbuf_p != rbuf_end)
+    return *rbuf_p++;
+  while (1) {
+    got = read(rbuf_fd, rbuf, sizeof rbuf);
+    if (got > 0) {
+      rbuf_p = rbuf;
+      rbuf_end = rbuf + got;
+      return *rbuf_p++;
+    } else if (got == 0) {
+      rbuf_p = rbuf_end = NULL;
+      return -1;  /* EOF */
+    } else if (errno == EAGAIN) {
+      /* This fflush(stdout) is the only reason why we are doing input
+       * buffering manually instead of using a FILE*.
+       */
+      fflush(stdout);
+      FD_SET(rbuf_fd, &rbuf_rset);
+      got = select(rbuf_fd + 1, &rbuf_rset, NULL, NULL, NULL);
+      if (got < 0 && got != EINTR) {
+        printf("\n error: error selecting for solution output pipe: %s\n",
+               strerror(errno));
+        exit(2);
+      }
+    } else if (errno != EINTR) {
+      printf("\n@ error: error reading from solution output pipe: %s\n",
+             strerror(errno));
+      exit(2);
+    }
+  }
+}
+
+static inline int rbuf_getc() {
+  if (rbuf_p != rbuf_end)
+    return *rbuf_p++;
+  return rbuf_getc_heavy();
+}
+
+/* --- */
+
 int main(int argc, char** argv) {
   char hdr[128];  /* Should be at least 52, for reading ELF */
   int hdr_size;
@@ -130,10 +199,8 @@ int main(int argc, char** argv) {
 
   (void)argc; (void)argv;
 
-  /* In our design, uevalrun writes everything to stdout (nothing to stderr),
-   * so it can be easily redirected, and redirection order is predicatble.
-   */
-  setbuf(stdout, NULL);
+  /* Disable line buffering, to make writing the output faster. */
+  setvbuf(stdout, NULL, _IOFBF, 8192);
 
   if (argv[1] == NULL) {
     usage(argv[0]);
@@ -392,9 +459,9 @@ int main(int argc, char** argv) {
   fclose(f);
 
   uml_rootfs_path = xstrcat(prog_dir, "/uevalrun.rootfs.minix.img");
-  if (NULL == (f = fopen(uml_linux_path, "r"))) {
-    printf("@ error: uml_linux not found: %s: %s\n",
-           uml_linux_path, strerror(errno));
+  if (NULL == (f = fopen(uml_rootfs_path, "r"))) {
+    printf("@ error: uml_rootfs not found: %s: %s\n",
+           uml_rootfs_path, strerror(errno));
     return 2;
   }
   fclose(f);
@@ -486,10 +553,7 @@ int main(int argc, char** argv) {
     exit(121);
   }
   close(pfd[1]);
-  if (NULL == (f = fdopen(pfd[0], "r"))) {
-    printf("@ error: read fdopen: %s\n", strerror(errno));
-    return 2;
-  }
+  rbuf_init(pfd[0]);
 
   state = ST_MIDLINE;
   mismatch_msg[0] = '\0';
@@ -497,11 +561,11 @@ int main(int argc, char** argv) {
   col = 1;
   answer_remaining = -1;
   /* TODO(pts): Limit the size of the answer */
-  while (0 <= (i = getc(f))) {
+  while (0 <= (i = rbuf_getc())) {
     if (state == ST_MIDLINE) {
       while (i != '\n') {
         putchar(i);
-        if (0 > (i = getc(f)))
+        if (0 > (i = rbuf_getc()))
           goto at_eof;
       }
       state = ST_BOL;
@@ -509,9 +573,10 @@ int main(int argc, char** argv) {
     if (state == ST_BOL) {
       while (i == '\n') {
         putchar(i);
-        if (0 > (i = getc(f)))
+        if (0 > (i = rbuf_getc()))
           goto at_eof;
       }
+      state = ST_MIDLINE;
       if (!PTS_ISDIGIT(i) || i == '0') {
        at_badhead:
         putchar(i);
@@ -521,7 +586,7 @@ int main(int argc, char** argv) {
       putchar(i);
       n = i - '0';
       while (1) {
-        if (0 > (i = getc(f)))
+        if (0 > (i = rbuf_getc()))
           goto at_eof;
         if (!PTS_ISDIGIT(i))
           break;
@@ -535,7 +600,7 @@ int main(int argc, char** argv) {
       putchar(i);
       /* Now read n bytes as the output of the solution. */
       for (; n > 0; --n) {
-        if (0 > (i = getc(f)))
+        if (0 > (i = rbuf_getc()))
           goto at_eof;
         if (mismatch_msg[0] == '\0') {
           if (0 > (j = getc(fexp))) {
@@ -577,13 +642,11 @@ int main(int argc, char** argv) {
     return 2;
   }
   fclose(fexp);
-  if (ferror(f)) {
-    printf("@ error: error reading from solution output pipe\n");
-    return 2;
+  close(pfd[0]);  /* rbuf_fd */
+  if (child != waitpid(child, &status, WNOHANG)) {
+    fflush(stdout);
+    while (child != waitpid(child, &status, 0)) {}
   }
-  fclose(f);
-  
-  while (child != waitpid(child, &status, 0)) {}
 
   if (status != 0) {
     if (mismatch_msg[0] == '\0') {

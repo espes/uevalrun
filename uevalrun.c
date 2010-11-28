@@ -590,7 +590,7 @@ static int work(flags_s *flags) {
       /* TODO(pts): Better error reporting if this is reached int the 2nd
        * phase, after compilation.
        */
-      printf("@ error: missing -U");
+      printf("@ error: missing -U\n");
       usage(flags->argv0);
       return 1;
     }

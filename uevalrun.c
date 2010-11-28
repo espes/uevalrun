@@ -14,6 +14,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * TODO(pts): What error message do we report if the solution wants to
+ *            write a very long wrong answer?
  * TODO(pts): make error messages more useful if the compilation fails
  * TODO(pts): Is there a 64MB limit (or just df?) for minix filesystems?
  * TODO(pts): move auxilary files like *-config to another dir

@@ -7,6 +7,21 @@ b {
   background: yellow;
 }
 </style>
+<script type="text/javascript">
+function adjustHeight() {
+  try {
+    if (_args()["parent"]) {
+      _IG_AdjustIFrameHeight();
+    }
+  } catch (e) {
+  }
+}
+function gadgetStartup() {
+  // adjustHeight()
+  gadgets.window.adjustHeight()
+}
+if (_IG_RegisterOnloadHandler)
+  _IG_RegisterOnloadHandler(gadgetStartup)
 </head><body>
 <h1>Documentation of uevalrun</h1>
 

@@ -412,32 +412,31 @@ static int work() {
       fprintf(stderr, "guestinit: child: setreuid() failed\n");
       exit(124);
     }
-#if 0  /* !! gcx */
-    rl.rlim_cur = 0;
-    rl.rlim_max = 0;
+    rl.rlim_cur = rl.rlim_max = 0;
     setrlimit(RLIMIT_CORE, &rl);
-    rl.rlim_cur = 0;
-    rl.rlim_max = 0;
-    setrlimit(RLIMIT_FSIZE, &rl);
-    rl.rlim_cur = 0;
-    rl.rlim_max = 0;
-    setrlimit(RLIMIT_LOCKS, &rl);
-    rl.rlim_cur = 0;
-    rl.rlim_max = 0;
+    rl.rlim_cur = rl.rlim_max = 0;
     setrlimit(RLIMIT_MEMLOCK, &rl);
-    rl.rlim_cur = 0;
-    rl.rlim_max = 0;
-    setrlimit(RLIMIT_MSGQUEUE, &rl);
-    rl.rlim_cur = 10;
-    rl.rlim_max = 10;
-    setrlimit(RLIMIT_NOFILE, &rl);
-    /* ruby1.9 needs 3 processes for its timer thread */
-    rl.rlim_max = rl.rlim_cur = is_ruby19 ? 3 : 0;
-    setrlimit(RLIMIT_NPROC, &rl);
-    rl.rlim_cur = RLIM_INFINITY;
-    rl.rlim_max = RLIM_INFINITY;
+    rl.rlim_cur = rl.rlim_max = RLIM_INFINITY;
     setrlimit(RLIMIT_STACK, &rl);
-#endif
+
+    if (is_gcx) {
+      /* 4 should be enough for gcc */
+      rl.rlim_max = rl.rlim_cur = 10;
+      setrlimit(RLIMIT_NPROC, &rl);
+    } else {    
+      rl.rlim_cur = rl.rlim_max = 0;
+      setrlimit(RLIMIT_FSIZE, &rl);
+      rl.rlim_cur = rl.rlim_max = 0;
+      setrlimit(RLIMIT_LOCKS, &rl);
+      rl.rlim_cur = rl.rlim_max = 0;
+      setrlimit(RLIMIT_MSGQUEUE, &rl);
+      rl.rlim_cur = 10;
+      rl.rlim_max = 10;
+      setrlimit(RLIMIT_NOFILE, &rl);
+      /* ruby1.9 needs 3 processes for its timer thread */
+      rl.rlim_max = rl.rlim_cur = is_ruby19 ? 3 : 0;
+      setrlimit(RLIMIT_NPROC, &rl);
+    }
     status = execve(args[0], args, env);
     /* This will appear as the stderr of the child. */
     fprintf(stderr, "execve() failed (%d): %s\n", status, strerror(errno));

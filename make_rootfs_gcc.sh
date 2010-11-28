@@ -8,10 +8,6 @@ set -ex
 
 test "${0%/*}" != "$0" && cd "${0%/*}"
 
-# !! tar cjvf mini-compiler-i686.tar.bz2 $(find compact-compiler-i686 -type f -or -type l | grep -vE '/(man|info|include/arpa|include/drm|include/mtd|include/protocols|include/rdma|include/scsi|include/sound|incode/video)/' | grep -v '[.]so')
-# !! SUXX: gcc needs a writable /tmp
-# !! SUXX: /proc/ not mounted
-
 # Make sure we fail unless weuse ./busybox for all non-built-in commands.
 export PATH=/dev/null
 

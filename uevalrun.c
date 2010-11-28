@@ -14,8 +14,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * TODO(pts): Restore terminal state after a failed UML run (kernel panic).
- * TODO(pts): Make the `halt' command work in `make run_mini_sys'
  * TODO(pts): don't lock the block devices in UML (read-only)
  * TODO(pts): move auxilary files like *-config to another dir
  * TODO(pts): build our binaries with our cross-compiler
@@ -23,6 +21,7 @@
  *            inside and outside UML (6x slower)
  * TODO(pts): Benchmark CPU-intensive calculations inside and outside UML.
  *            (1x slower).
+ * !! TODO(pts): Why does `examples/run.sh gcc' fail once per 10 calls?
  * * we have to set: CONFIG_HIGH_RES_TIMERS=y
  *   to avoid this kernel syslog message: Switched to NOHz mode on CPU #0
  */
@@ -62,7 +61,6 @@ static char *xstrcat(char const *s1, char const *s2) {
   return t;
 }
 
-#if 0
 static char *xstrcat3(char const *s1, char const *s2, char const *s3) {
   size_t ss1 = strlen(s1);
   size_t ss2 = strlen(s2);
@@ -74,7 +72,6 @@ static char *xstrcat3(char const *s1, char const *s2, char const *s3) {
   strcpy(t + ss1 + ss2, s3);
   return t;
 }
-#endif
 
 static char *xslice(const char *s, size_t slen) {
   char *t = malloc(slen + 1);
@@ -103,7 +100,9 @@ static char shebang_has_command(const char *shebang, const char *command) {
 static void usage(const char* argv0) {
   printf("@ info: usage: %s -M <mem_mb> -T <timeout> "
          "-E <excess_answer_limit_kb> -s <solution_binary> "
-         "{-o <binary_output> | -t <test_input> -e <expected_output>}\n", argv0);
+         "[-C <compiler_disk_mb> -N <compiler_mem_mb> -U <compiler_timeout> "
+         "-o <binary_output>] "
+         "[-t <test_input> -e <expected_output>]\n", argv0);
 }
 
 /* --- Read buffering */
@@ -202,46 +201,46 @@ static char is_c_header(const char *hdr, int hdr_size) {
          (hdr_size >= 2 && hdr[0] == '#' && IS_LCALPHA(hdr[1]));
 }
 
-int main(int argc, char** argv) {
-  char hdr[128];  /* Should be at least 52, for reading ELF */
-  int hdr_size;
-  char mismatch_msg[128];
-  char state;
-  int pfd[2];
-  int status;
-  pid_t child;
-  FILE *f, *fexp, *fout;
-  int i, j, n, line, col, opt;
-  char is_gcx;
-  int answer_remaining;
-  char *args[16];
-  char *envs[] = {NULL};
-  char memarg[16];
-  char *prog_dir;
-  char *uml_linux_path;
-  char *uml_rootfs_path;
-  char *guestinit_path;
-  char *solution_format;
-  char *gcxtmp_path;
-
+typedef struct {
   /* TODO(pts): Disallow too small values for the limit options. */
-  int mem_mb = -1; /* -M */
-  int timeout = -1;  /* -T */
-  int excess_answer_limit_kb = -1; /* -E */
+  int mem_mb; /* -M */
+  int timeout;  /* -T */
+  int excess_answer_limit_kb; /* -E */
   /* Total maximum file size (+ minix filesystem overhead) of the source
    * file, the assembly output file (.s) and the binary (executable) file
    * produced by the compiler.
    */
-  int compiler_disk_mb = -1;  /* -C */
-  char *solution_binary = NULL;  /* -s */
-  char *test_input = NULL; /* -t */
-  char *binary_output = NULL; /* -o */
-  char *expected_output = NULL; /* -e */
+  int compiler_disk_mb;  /* -C */
+  int compiler_mem_mb;  /* -N */
+  int compiler_timeout; /* -U */
+  char *solution_binary;  /* -s */
+  char *test_input; /* -t */
+  char *binary_output; /* -o */
+  char *expected_output; /* -e */
 
-  (void)argc; (void)argv;
+  char *prog_dir;
+  char *argv0;
+  char *gcxtmp_path;
+  char is_binary_output_tmp;
+} flags_s;
 
-  /* Disable line buffering, to make writing the output faster. */
-  setvbuf(stdout, NULL, _IOFBF, 8192);
+static int parse_cmdline(int argc, char** argv, flags_s *flags) {
+  int opt, i;
+
+  flags->mem_mb = -1;
+  flags->compiler_mem_mb = -1;
+  flags->timeout = -1;
+  flags->compiler_timeout = -1;
+  flags->excess_answer_limit_kb = -1;
+  flags->compiler_disk_mb = -1;
+  flags->solution_binary = NULL;
+  flags->test_input = NULL;
+  flags->binary_output = NULL;
+  flags->expected_output = NULL;
+  flags->prog_dir = NULL;
+  flags->argv0 = argv[0];
+  flags->is_binary_output_tmp = 0;
+  flags->gcxtmp_path = NULL;
 
   if (argv[1] == NULL) {
     usage(argv[0]);
@@ -252,24 +251,34 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  while ((opt = getopt(argc, argv, "M:T:E:C:s:t:e:h:o:")) != -1) {
+  while ((opt = getopt(argc, argv, "M:N:T:U:E:C:s:t:e:h:o:")) != -1) {
     if (opt == 'M') {
-      if (1 != sscanf(optarg, "%i", &mem_mb)) {
+      if (1 != sscanf(optarg, "%i", &flags->mem_mb)) {
         printf("@ error: bad -M syntax\n");
         return 1;
       }
+    } else if (opt == 'N') {
+      if (1 != sscanf(optarg, "%i", &flags->compiler_mem_mb)) {
+        printf("@ error: bad -N syntax\n");
+        return 1;
+      }
     } else if (opt == 'T') {
-      if (1 != sscanf(optarg, "%i", &timeout)) {
+      if (1 != sscanf(optarg, "%i", &flags->timeout)) {
         printf("@ error: bad -T syntax\n");
         return 1;
       }
+    } else if (opt == 'U') {
+      if (1 != sscanf(optarg, "%i", &flags->compiler_timeout)) {
+        printf("@ error: bad -U syntax\n");
+        return 1;
+      }
     } else if (opt == 'E') {
-      if (1 != sscanf(optarg, "%i", &excess_answer_limit_kb)) {
+      if (1 != sscanf(optarg, "%i", &flags->excess_answer_limit_kb)) {
         printf("@ error: bad -E syntax\n");
         return 1;
       }
     } else if (opt == 'C') {
-      if (1 != sscanf(optarg, "%i", &compiler_disk_mb)) {
+      if (1 != sscanf(optarg, "%i", &flags->compiler_disk_mb)) {
         printf("@ error: bad -C syntax\n");
         return 1;
       }
@@ -278,25 +287,25 @@ int main(int argc, char** argv) {
         printf("@ error: bad -s syntax\n");
         return 1;
       }
-      solution_binary = optarg;
+      flags->solution_binary = optarg;
     } else if (opt == 't') {
       if (optarg[0] == '\0') {
         printf("@ error: bad -t syntax\n");
         return 1;
       }
-      test_input = optarg;
+      flags->test_input = optarg;
     } else if (opt == 'o') {
       if (optarg[0] == '\0') {
         printf("@ error: bad -o syntax\n");
         return 1;
       }
-      binary_output = optarg;
+      flags->binary_output = optarg;
     } else if (opt == 'e') {
       if (optarg[0] == '\0') {
         printf("@ error: bad -t syntax\n");
         return 1;
       }
-      expected_output = optarg;
+      flags->expected_output = optarg;
     } else {
       printf("@ error: unknown command-line flag\n");
       usage(argv[0]);
@@ -308,22 +317,68 @@ int main(int argc, char** argv) {
     usage(argv[0]);
     return 1;
   }
-  if (mem_mb < 0) {
-    printf("@ error: missing -M\n");
-    usage(argv[0]);
-    return 1;
+  if (flags->mem_mb >= 0 ||
+      flags->timeout >= 0 ||
+      flags->excess_answer_limit_kb >= 0) {
+    if (flags->mem_mb < 0) {
+      printf("@ error: missing -M\n");
+      usage(argv[0]);
+      return 1;
+    }
+    if (flags->timeout < 0) {
+      printf("@ error: missing -T\n");
+      usage(argv[0]);
+      return 1;
+    }
+    if (flags->excess_answer_limit_kb < 0) {
+      printf("@ error: missing -E\n");
+      usage(argv[0]);
+      return 1;
+    }
+    if (flags->mem_mb == 0 || flags->mem_mb > 2000) {
+      /* 4096MB is the absolute hard limit, since our UML is a 32-bit binary. */
+      printf("@ error: expected 1 <= mem_mb <= 2000, got %d\n", flags->mem_mb);
+      return 1;
+    }
+    if (flags->timeout == 0) {
+      printf("@ error: expected 1 <= timeout, got %d\n", flags->timeout);
+      return 1;
+    }
   }
-  if (timeout < 0) {
-    printf("@ error: missing -T\n");
-    usage(argv[0]);
-    return 1;
+  if (flags->compiler_mem_mb >= 0 ||
+      flags->compiler_timeout >= 0 ||
+      flags->compiler_disk_mb >= 0) {
+    if (flags->compiler_mem_mb < 0) {
+      printf("@ error: missing -N\n");
+      usage(argv[0]);
+      return 1;
+    }
+    if (flags->compiler_timeout < 0) {
+      printf("@ error: missing -U\n");
+      usage(argv[0]);
+      return 1;
+    }
+    if (flags->compiler_disk_mb < 0) {
+      printf("@ error: missing -C\n");
+      usage(argv[0]);
+      return 1;
+    }
+    if (flags->compiler_mem_mb == 0 || flags->compiler_mem_mb > 2000) {
+      /* 4096MB is the absolute hard limit, since our UML is a 32-bit binary. */
+      printf("@ error: expected 1 <= compiler_mem_mb <= 2000, got %d\n", flags->compiler_mem_mb);
+      return 2;
+    }
+    if (flags->compiler_timeout == 0) {
+      printf("@ error: expected 1 <= compiler_timeout, got %d\n", flags->compiler_timeout);
+      return 1;
+    }
+    if (flags->compiler_disk_mb == 0) {
+      printf("@ error: expected 1 <= compiler_disk_mb, got %d\n",
+             flags->compiler_disk_mb);
+      return 1;
+    }
   }
-  if (excess_answer_limit_kb < 0) {
-    printf("@ error: missing -E\n");
-    usage(argv[0]);
-    return 1;
-  }
-  if (solution_binary == NULL) {
+  if (flags->solution_binary == NULL) {
     printf("@ error: missing -s\n");
     usage(argv[0]);
     return 1;
@@ -332,18 +387,44 @@ int main(int argc, char** argv) {
   i = strlen(argv[0]);
   while (i > 0 && argv[0][i - 1] != '/')
     --i;
-  if (i > 0)  /* prog_dir = "" means "/" */
-    prog_dir = xslice(argv[0], i - 1);
+  if (i > 0) { /* prog_dir = "" means "/" */
+    flags->prog_dir = xslice(argv[0], i - 1);
+  } else {
+    flags->prog_dir = ".";
+  }
 
-  if (NULL == (f = fopen(solution_binary, "r"))) {
-    printf("@ error: open solution binary: %s: %s\n", solution_binary,
+  return 0;
+}
+
+static int work(flags_s *flags) {
+  char hdr[128];  /* Should be at least 52, for reading ELF */
+  int hdr_size;
+  char mismatch_msg[128];
+  char state;
+  int pfd[2];
+  int status;
+  pid_t child;
+  FILE *f, *fexp, *fout;
+  int i, j, n, line, col;
+  char is_gcx;
+  int answer_remaining;
+  char *args[16];
+  char *envs[] = {NULL};
+  char memarg[16];
+  char *uml_linux_path;
+  char *uml_rootfs_path;
+  char *guestinit_path;
+  char *solution_format;
+
+  if (NULL == (f = fopen(flags->solution_binary, "r"))) {
+    printf("@ error: open solution binary: %s: %s\n", flags->solution_binary,
             strerror(errno));
     return 2;
   }
   memset(hdr, '\0', sizeof hdr);
   if (0 > (hdr_size = fread(hdr, 1, sizeof hdr - 1, f))) {
     printf("@ error: cannot read from solution binary: %s: %s\n",
-           solution_binary, strerror(errno));
+           flags->solution_binary, strerror(errno));
     return 2;
   }
   hdr[hdr_size] = '\0';
@@ -351,44 +432,48 @@ int main(int argc, char** argv) {
   if (hdr_size >= 4 && 0 == memcmp(hdr, "\177ELF", 4)) {
     unsigned char *u;
     unsigned long sh_ofs;  /* Section header table offset */
-    unsigned long flags;
+    unsigned long uflags;
     unsigned long long total_memsize;
     int sh_entsize;  /* Section header table entry size */
     int sh_num;  /* Section header table entry count */
+    if (flags->mem_mb < 0) {
+      printf("@ error: missing -M\n");
+      usage(flags->argv0);
+    }
     if (hdr_size < 52) {
       printf("@ error: solution binary too small, cannot be ELF: %s\n",
-             solution_binary);
+             flags->solution_binary);
       /* TODO(pts): fclose(f); fclose(fexp); everywhere */
       return 2;
     }
     if (hdr[4] != 1) {
       printf("@ error: solution binary not for 32-bit architecture: %s\n",
-             solution_binary);
+             flags->solution_binary);
       return 2;
     }
     if (hdr[5] != 1) {
       printf("@ error: solution binary not for LSB architecture: %s\n",
-             solution_binary);
+             flags->solution_binary);
       return 2;
     }
     if (hdr[16] != 2 || hdr[17] != 0) {
       printf("@ error: solution binary not an executable: %s\n",
-             solution_binary);
+             flags->solution_binary);
       return 2;
     }
     if (hdr[18] != 3 || hdr[19] != 0) {
       printf("@ error: solution binary not for x86 architecture: %s\n",
-             solution_binary);
+             flags->solution_binary);
       return 2;
     }
     if (hdr[20] != 1) {
       printf("@ error: solution binary not version 1: %s\n",
-             solution_binary);
+             flags->solution_binary);
       return 2;
     }
     if ((hdr[7] != 0 && hdr[7] != 3) || hdr[8] != 0) {
       printf("@ error: solution binary not for Linux: %s\n",
-             solution_binary);
+             flags->solution_binary);
       return 2;
     }
     u = (unsigned char*)hdr + 32;
@@ -400,17 +485,17 @@ int main(int argc, char** argv) {
            sh_ofs, sh_entsize, sh_num);
     if (sh_entsize + 0U > sizeof(hdr)) {
       printf("@ error: solution binary sh_entsize too large: %s: %d\n",
-             solution_binary, sh_entsize);
+             flags->solution_binary, sh_entsize);
       return 2;
     }
     if (sh_num < 1) {
       printf("@ error: solution binary sh_num too small: %s: %d\n",
-             solution_binary, sh_num);
+             flags->solution_binary, sh_num);
       return 2;
     }
     if (0 != fseek(f, sh_ofs, SEEK_SET)) {
       printf("@ error: cannot seek to sh_ofs: %s: %lu: %s\n",
-             solution_binary, sh_ofs, strerror(errno));
+             flags->solution_binary, sh_ofs, strerror(errno));
       return 2;
     }
     total_memsize = 0;
@@ -418,12 +503,12 @@ int main(int argc, char** argv) {
       if (sh_entsize + 0U != fread(hdr, 1, sh_entsize, f)) {
         printf("@ error: cannot read section header in solution binary: "
                "%s: %d/%d: %s\n",
-               solution_binary, i, sh_num, strerror(errno));
+               flags->solution_binary, i, sh_num, strerror(errno));
         return 2;
       }
       u = (unsigned char*)hdr + 8;
-      flags = u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24);
-      if ((flags & ELF_SHF_ALLOC) != 0) {
+      uflags = u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24);
+      if ((uflags & ELF_SHF_ALLOC) != 0) {
         u = (unsigned char*)hdr + 20;
         total_memsize += u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24);
       }
@@ -432,7 +517,7 @@ int main(int argc, char** argv) {
       printf("@ result: memory exceeded, needs way too static memory\n");
       return 3;
     }
-    if (((total_memsize + ((1 << 20) - 1)) >> 20) >= mem_mb + 0U) {
+    if (((total_memsize + ((1 << 20) - 1)) >> 20) >= flags->mem_mb + 0U) {
       printf("@ result: memory exceeded, needs too much static memory: %ldMB\n",
              (long)((total_memsize + ((1 << 20) - 1)) >> 20));
       return 3;
@@ -479,84 +564,79 @@ int main(int argc, char** argv) {
   }
   fclose(f);
 
+  if (flags->expected_output != NULL ||
+      flags->test_input != NULL ||
+      !is_gcx) {
+    if (flags->test_input == NULL) {
+      printf("@ error: missing -t\n");
+      usage(flags->argv0);
+      return 1;
+    }
+    if (flags->expected_output == NULL) {
+      printf("@ error: missing -e\n");
+      usage(flags->argv0);
+      return 1;
+    }
+  }
+
   if (is_gcx) {
-    if (binary_output == NULL) {
-      printf("@ error: missing -o\n");
-      usage(argv[0]);
+    if (flags->compiler_mem_mb == -1) {
+      /* TODO(pts): Better error reporting if this is reached int the 2nd
+       * phase, after compilation.
+       */
+      printf("@ error: missing -U");
+      usage(flags->argv0);
       return 1;
     }
-    if (test_input != NULL) {
-      printf("@ error: unexpected -t\n");
-      usage(argv[0]);
-      return 1;
-    }
-    if (expected_output != NULL) {
-      printf("@ error: unexpected -e\n");
-      usage(argv[0]);
-      return 1;
+    if (flags->binary_output == NULL) {
+      sprintf(mismatch_msg, "%d", (int)getpid());
+      flags->is_binary_output_tmp = 1;
+      /* TODO(pts): Clean up even on signal exit. */
+      flags->binary_output = xstrcat3(
+          flags->prog_dir, "/uevalrun.tmp.bin.", mismatch_msg);
     }
   } else {
-    if (test_input == NULL) {
-      printf("@ error: missing -t\n");
-      usage(argv[0]);
-      return 1;
-    }
-    if (expected_output == NULL) {
-      printf("@ error: missing -e\n");
-      usage(argv[0]);
-      return 1;
-    }
-    if (binary_output != NULL) {
+    if (flags->binary_output != NULL) {
       printf("@ error: unexpected -o\n");
-      usage(argv[0]);
+      usage(flags->argv0);
       return 1;
     }
   }
 
-  if (binary_output == NULL) {
+  if (flags->binary_output == NULL) {
     fout = NULL;
-  } else if (NULL == (fout = fopen(binary_output, "w"))) {
-    printf("@ error: open binary output: %s: %s\n", expected_output,
+  } else if (NULL == (fout = fopen(flags->binary_output, "w"))) {
+    printf("@ error: open binary output: %s: %s\n", flags->expected_output,
             strerror(errno));
     return 2;
   }
 
-  if (expected_output == NULL) {
+  if (is_gcx || flags->expected_output == NULL) {
     fexp = NULL;
-  } else if (NULL == (fexp = fopen(expected_output, "r"))) {
-    printf("@ error: open expected output: %s: %s\n", expected_output,
+  } else if (NULL == (fexp = fopen(flags->expected_output, "r"))) {
+    printf("@ error: open expected output: %s: %s\n", flags->expected_output,
             strerror(errno));
     return 2;
-  }
-
-  if (mem_mb < 1 || mem_mb > 2000) {
-    /* 4096MB is the absolute hard limit, since our UML is a 32-bit binary. */
-    printf("@ error: expected 1 <= mem_mb <= 2000, got %d\n", mem_mb);
-    return 2;
-  }
-  if (is_gcx) {
-    if (compiler_disk_mb == -1) {
-      printf("@ error: missing -C\n");
-      usage(argv[0]);
-      return 1;
-    } else if (compiler_disk_mb < 1) {
-      printf("@ error: expected 1 <= compiler_disk_mb, got %d\n",
-             compiler_disk_mb);
-      return 2;
-    }
   }
 
   if (is_gcx) {
     int fd;
-    gcxtmp_path = xstrcat(prog_dir, "/uevalrun.rootfs.gcctmp.minix.img");
-    if (0 > (fd = open(gcxtmp_path, O_WRONLY | O_CREAT, 0644))) {
+    if (flags->compiler_disk_mb == -1) {
+      printf("@ error: missing -C\n");
+      usage(flags->argv0);
+      return 1;
+    }
+    sprintf(mismatch_msg, "%d", (int)getpid());
+    flags->gcxtmp_path = xstrcat3(
+        flags->prog_dir, "/uevalrun.tmp.gccimg.", mismatch_msg);
+    if (0 > (fd = open(flags->gcxtmp_path, O_WRONLY | O_CREAT, 0644))) {
       printf("@ error: cannot create gcxtmp: %s: %s\n",
-             gcxtmp_path, strerror(errno));
+             flags->gcxtmp_path, strerror(errno));
       return 2;
     }
-    if (0 != ftruncate(fd, (off_t)compiler_disk_mb << 20)) {
+    if (0 != ftruncate(fd, (off_t)flags->compiler_disk_mb << 20)) {
       printf("@ error: cannot set size of gcxtmp: %s: %s\n",
-             gcxtmp_path, strerror(errno));
+             flags->gcxtmp_path, strerror(errno));
       return 2;
     }
     /* No need to clear previous contents, the user won't be able
@@ -568,7 +648,11 @@ int main(int argc, char** argv) {
      */
   }
 
-  guestinit_path = xstrcat(prog_dir, "/uevalrun.guestinit");
+  /* We don't care about free()ig the strings created by xstrcat etc.,
+   * because they are small, and we don't allocate much.
+   * TODO(pts): Revisit or validate this policy.
+   */
+  guestinit_path = xstrcat(flags->prog_dir, "/uevalrun.guestinit");
   if (NULL == (f = fopen(guestinit_path, "r"))) {
     printf("@ error: guestinit not found: %s: %s\n",
            guestinit_path, strerror(errno));
@@ -576,7 +660,7 @@ int main(int argc, char** argv) {
   }
   fclose(f);
 
-  uml_linux_path = xstrcat(prog_dir, "/uevalrun.linux.uml");
+  uml_linux_path = xstrcat(flags->prog_dir, "/uevalrun.linux.uml");
   if (NULL == (f = fopen(uml_linux_path, "r"))) {
     printf("@ error: uml_linux not found: %s: %s\n",
            uml_linux_path, strerror(errno));
@@ -585,9 +669,9 @@ int main(int argc, char** argv) {
   fclose(f);
 
   if (is_gcx) {
-    uml_rootfs_path = xstrcat(prog_dir, "/uevalrun.rootfs.gcc.minix.img");
+    uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.gcc.minix.img");
   } else {
-    uml_rootfs_path = xstrcat(prog_dir, "/uevalrun.rootfs.minix.img");
+    uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.minix.img");
   }
   if (NULL == (f = fopen(uml_rootfs_path, "r"))) {
     printf("@ error: uml_rootfs not found: %s: %s\n",
@@ -599,7 +683,8 @@ int main(int argc, char** argv) {
   /* 6MB is needed by the UML kernel and its buffers. It wouldn't work with
    * 5MB (probed).
    */
-  sprintf(memarg, "mem=%dM", mem_mb + 6);
+  sprintf(memarg, "mem=%dM", 
+          (is_gcx ? flags->compiler_mem_mb : flags->mem_mb) + 6);
 
   i = 0;
   args[i++] = uml_linux_path;
@@ -608,15 +693,15 @@ int main(int argc, char** argv) {
   args[i++] = "con0=fd:-1,fd:1";
   args[i++] = memarg;
   args[i++] = xstrcat("ubda=", uml_rootfs_path);
-  args[i++] = xstrcat("ubdb=", solution_binary);
-  /* TODO(pts): Verify that test_input etc. don't contain comma, space or
+  args[i++] = xstrcat("ubdb=", flags->solution_binary);
+  /* TODO(pts): Verify that flags->test_input etc. don't contain comma, space or
    * something UML would interpret.
    */
-  if (test_input != NULL)
-    args[i++] = xstrcat("ubdc=", test_input);
+  if (flags->test_input != NULL)
+    args[i++] = xstrcat("ubdc=", flags->test_input);
   args[i++] = xstrcat("ubdd=", guestinit_path);
   if (is_gcx)
-    args[i++] = xstrcat("ubde=", gcxtmp_path);
+    args[i++] = xstrcat("ubde=", flags->gcxtmp_path);
   args[i++] = xstrcat("solution_format=", solution_format);
   args[i++] = "init=/dev/ubdd";
   args[i] = NULL;
@@ -634,6 +719,7 @@ int main(int argc, char** argv) {
   if (child == 0) {  /* Child */
     int fd;
     struct rlimit rl;
+    int timeout = is_gcx ? flags->compiler_timeout : flags->timeout;
     close(0);
     close(pfd[0]);
     if (fexp != NULL)
@@ -762,7 +848,7 @@ int main(int argc, char** argv) {
           if (0 > (i = rbuf_getc()))
             goto at_eof;
           if (mismatch_msg[0] == '\0') {
-            answer_remaining = excess_answer_limit_kb << 10;
+            answer_remaining = flags->excess_answer_limit_kb << 10;
             if (0 > (j = getc(fexp))) {
               sprintf(mismatch_msg, "@ result: wrong answer, .exp is shorter at %d:%d\n", line, col);
             } else if (i != j) {
@@ -850,11 +936,49 @@ int main(int argc, char** argv) {
     return 3;
   }
   if (is_gcx) {
-    printf("@ result: compilation successful\n");
+    if (flags->expected_output != NULL) {
+      printf("@ info: compilation successful\n");
+      fflush(stdout);
+      return -2;
+    } else {
+      printf("@ result: compilation successful\n");
+    }
   } else if (fexp == NULL) {
     printf("@ result: success\n");  /* Should never happen, is_gcx is true */
   } else {
     printf("@ result: pass\n");  /* Actual output matches expected output. */
   }
   return 0;
+}
+
+int main(int argc, char** argv) {
+  flags_s flags;
+  int ret;
+  
+  ret = parse_cmdline(argc, argv, &flags);
+  if (ret != 0)
+    return ret;
+
+  /* Disable line buffering, to make writing the output faster. */
+  setvbuf(stdout, NULL, _IOFBF, 8192);
+
+  ret = work(&flags);
+  if (flags.gcxtmp_path != NULL)
+    unlink(flags.gcxtmp_path);
+  /* TODO(pts): Get rid of magic constants for ret. */
+  if (ret == -2) {  /* Run the binary after a successful compilation. */
+    fflush(stdout);
+    flags.solution_binary = flags.binary_output;
+    flags.binary_output = NULL;
+    flags.compiler_mem_mb = -1;
+    flags.compiler_disk_mb = -1;
+    flags.compiler_timeout = -1;
+    ret = work(&flags);
+    if (flags.is_binary_output_tmp)
+      unlink(flags.solution_binary);
+  } else {
+    if (flags.is_binary_output_tmp)
+      unlink(flags.binary_output);
+  }
+  return ret;
 }

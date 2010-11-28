@@ -1,7 +1,40 @@
 <html><head>
+<title>Documentation of uevalrun</title>
+<meta name=http-equiv content="Content-Type: text/html; charset=UTF-8">
 <style type="text/css">
 body {
   background: green;
+  font-family: Times New Roman;
+  font-size: 16px;
+}
+p {
+  margin-top: 5px;
+  margin-bottom: 10px;
+}
+ul {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  margin-left: 0px;
+  padding-left: 20px;
+}
+ol {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  margin-left: 0px;
+  padding-left: 20px;
+}
+h1 {
+  font-size: 140%;
+  margin-top: 20px;
+  margin-bottom: 5px;
+}
+h2 {
+  font-size: 120%;
+  margin-top: 10px;
+  margin-bottom: 5px;
+}
+body > h1.title {
+  margin-top: 0px;
 }
 b {
   background: yellow;
@@ -17,22 +50,70 @@ function adjustHeight() {
   }
 }
 function gadgetStartup() {
-  // adjustHeight()
   // gadgets.window.adjustHeight()
   adjustHeight()
 }
+// Black magic to work as a Google Gadget on the wiki page.
 if (typeof _IG_RegisterOnloadHandler != 'undefined')
   _IG_RegisterOnloadHandler(gadgetStartup)
 </script>
 </head><body>
-<h1>Documentation of uevalrun</h1>
+<h1 class=title>Documentation of uevalrun</h1>
+
+<h2>Introduction</h1>
 
 <p>Hello, <b>World</b>!
 
-<p>1a
-<p>2
-<p>3
-<p>4
+<p>1a You can override a built-in implicit rule (or one you have defined
+yourself) by defining a new pattern rule with the same target and
+prerequisites, but different commands.  When the new rule is defined,
+the built-in one is replaced.  The new rule's position in the sequence
+of implicit rules is determined by where you write the new rule.
+You can cancel a built-in implicit rule by defining a pattern rule
+with the same target and prerequisites, but no commands.  For example,
+the following would cancel the rule that runs the assembler:
+
+<p>2a You can override a built-in implicit rule (or one you have defined
+yourself) by defining a new pattern rule with the same target and
+prerequisites, but different commands.  When the new rule is defined,
+the built-in one is replaced.  The new rule's position in the sequence
+of implicit rules is determined by where you write the new rule.
+You can cancel a built-in implicit rule by defining a pattern rule
+with the same target and prerequisites, but no commands.  For example,
+the following would cancel the rule that runs the assembler:
+
+<ul>
+<li>foo
+<ol>
+<li>food
+<li>foot
+</ol>
+<ul>
+<li>food
+<li>foot
+</ul>
+<li>bar
+</ul>
+
+<h2>Next section</h2>
+<p>3a You can override a built-in implicit rule (or one you have defined
+yourself) by defining a new pattern rule with the same target and
+prerequisites, but different commands.  When the new rule is defined,
+the built-in one is replaced.  The new rule's position in the sequence
+of implicit rules is determined by where you write the new rule.
+You can cancel a built-in implicit rule by defining a pattern rule
+with the same target and prerequisites, but no commands.  For example,
+the following would cancel the rule that runs the assembler:
+
+<h1>Continue</h1>
+<p>4a You can override a built-in implicit rule (or one you have defined
+yourself) by defining a new pattern rule with the same target and
+prerequisites, but different commands.  When the new rule is defined,
+the built-in one is replaced.  The new rule's position in the sequence
+of implicit rules is determined by where you write the new rule.
+You can cancel a built-in implicit rule by defining a pattern rule
+with the same target and prerequisites, but no commands.  For example,
+the following would cancel the rule that runs the assembler:
 <p>5
 <p>6
 <p>7

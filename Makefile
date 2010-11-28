@@ -34,8 +34,8 @@ clean:
 $(CCBIN):
 	./busybox sh download.sh gcxbase.stbx86.tbz2 gcc.stbx86.tbz2
 	./busybox mkdir -p cross-compiler
-	cd cross-compiler && ./busybox tar xjf ../gcxbase.stbx86.tbz2
-	cd cross-compiler && ./busybox tar xjf ../gcc.stbx86.tbz2
+	cd cross-compiler && ../busybox tar xjf ../gcxbase.stbx86.tbz2
+	cd cross-compiler && ../busybox tar xjf ../gcc.stbx86.tbz2
 	test -x $(CCBIN)
 
 uevalrun: uevalrun.c $(CCBIN)

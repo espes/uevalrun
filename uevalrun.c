@@ -21,7 +21,6 @@
  *            inside and outside UML (6x slower)
  * TODO(pts): Benchmark CPU-intensive calculations inside and outside UML.
  *            (1x slower).
- * !! TODO(pts): Why does `examples/run.sh gcc' fail once per 10 calls?
  * * we have to set: CONFIG_HIGH_RES_TIMERS=y
  *   to avoid this kernel syslog message: Switched to NOHz mode on CPU #0
  */
@@ -410,6 +409,7 @@ static int work(flags_s *flags) {
   int answer_remaining;
   char *args[16];
   char *envs[] = {NULL};
+  char mem_used;
   char memarg[16];
   char *uml_linux_path;
   char *uml_rootfs_path;
@@ -683,8 +683,14 @@ static int work(flags_s *flags) {
   /* 6MB is needed by the UML kernel and its buffers. It wouldn't work with
    * 5MB (probed).
    */
-  sprintf(memarg, "mem=%dM", 
-          (is_gcx ? flags->compiler_mem_mb : flags->mem_mb) + 6);
+  mem_used = (is_gcx ? flags->compiler_mem_mb : flags->mem_mb) + 6;
+  /* UML is unreliable with mem=9M, it crashes soon after printing
+   * ``UML running in SKAS0 mode''
+   * TODO(pts): Report this bug, find the root cause.
+   */
+  if (mem_used < 10)
+    mem_used = 10;
+  sprintf(memarg, "mem=%dM", mem_used);
 
   i = 0;
   args[i++] = uml_linux_path;
@@ -719,7 +725,7 @@ static int work(flags_s *flags) {
   if (child == 0) {  /* Child */
     int fd;
     struct rlimit rl;
-    int timeout = is_gcx ? flags->compiler_timeout : flags->timeout;
+    int timeout_used = is_gcx ? flags->compiler_timeout : flags->timeout;
     close(0);
     close(pfd[0]);
     if (fexp != NULL)
@@ -751,7 +757,7 @@ static int work(flags_s *flags) {
       }
       close(pfd[1]);
     }
-    alarm(timeout + 3 + timeout / 10);
+    alarm(timeout_used + 3 + timeout_used / 10);
     /* UML needs more than 300 processes. This will be restricted to 0
      * just before the execve(...) to the temp binary.
      */
@@ -761,8 +767,8 @@ static int work(flags_s *flags) {
     rl.rlim_cur = 0;
     rl.rlim_max = 0;
     setrlimit(RLIMIT_CORE, &rl);
-    rl.rlim_cur = timeout;
-    rl.rlim_max = timeout + 2;
+    rl.rlim_cur = timeout_used;
+    rl.rlim_max = timeout_used + 2;
     /* This applies to all UML host subprocesses, but most of them don't
      * consume much CPU time, so this global limit should be fine.
      *

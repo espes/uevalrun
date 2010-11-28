@@ -3,7 +3,8 @@
 <meta name=http-equiv content="Content-Type: text/html; charset=UTF-8">
 <style type="text/css">
 body {
-  background: green;
+  background: #fff;
+  color: #000;
   font-family: Times New Roman;
   font-size: 16px;
 }
@@ -39,6 +40,17 @@ body > h1.title {
 b {
   background: yellow;
 }
+code {
+  font-size:80%;
+  font-family: DejaVu Sans Mono, Bitstream Vera Mono, Lucia Sans Mono, Consolas, Courier;  
+}
+pre {
+  border: 1px solid #000;
+  font-size:80%;
+  font-family: DejaVu Sans Mono, Bitstream Vera Mono, Lucia Sans Mono, Consolas, Courier;  
+  padding: 1px;
+}
+
 </style>
 <script>
 function adjustHeight() {
@@ -58,66 +70,242 @@ if (typeof _IG_RegisterOnloadHandler != 'undefined')
   _IG_RegisterOnloadHandler(gadgetStartup)
 </script>
 </head><body>
+
 <h1 class=title>Documentation of uevalrun</h1>
 
-<h2>Introduction</h1>
+<p>uevalrun is a self-contained computation sandbox for Linux, using
+User-mode Linux for both compilation and execution of the program to be
+sandboxed. The program can be written in C, C++, Python, Ruby, Perl or PHP.
+uevanrun enforces memory limits, timeouts and output size limits in the
+sandbox. The primary use case for uevalrun is evaluation of solution
+programs submitted by contestants of programming contests: uevalrun compiles
+the solution, runs it with the test input, compares its output against
+the expected output, and writes a status report.
 
-<p>Hello, <b>World</b>!!
+<h2>Installation</h2>
 
-<p>1a You can override a built-in implicit rule (or one you have defined
-yourself) by defining a new pattern rule with the same target and
-prerequisites, but different commands.  When the new rule is defined,
-the built-in one is replaced.  The new rule's position in the sequence
-of implicit rules is determined by where you write the new rule.
-You can cancel a built-in implicit rule by defining a pattern rule
-with the same target and prerequisites, but no commands.  For example,
-the following would cancel the rule that runs the assembler:
+<p>A 32-bit (x86, i386) or 64-bit (x86_64, amd64) Linux system is required
+with enough RAM for both compilation and execution, plus 6 MB memory
+overhead. The Linux distribution doesn't matter, because uevalrun uses
+statically linked binaries, and it's self-contained: it contains all the
+tools it needs, including the C and C++ compilers (from the uClibc gcc-4.1.2
+toolchain).
 
-<p>2a You can override a built-in implicit rule (or one you have defined
-yourself) by defining a new pattern rule with the same target and
-prerequisites, but different commands.  When the new rule is defined,
-the built-in one is replaced.  The new rule's position in the sequence
-of implicit rules is determined by where you write the new rule.
-You can cancel a built-in implicit rule by defining a pattern rule
-with the same target and prerequisites, but no commands.  For example,
-the following would cancel the rule that runs the assembler:
+<p>uevalrun doesn't need root privileges: it runs as a simple user.
+
+<p>uevalrun needs about 160MB of disk space, most of which is consumed by
+the C compiler (31MB extracted + 17MB compressed), the scripting language
+interpreters (9MB compressed), and the virtual disk images (77MB,
+uncompressed). After removing all temporary files, 80MB will be enough.
+
+<p>Download and compile:
+
+<pre>$ svn co http://pts-mini-gpl.googlecode.com/svn/trunk/uevalrun uevalrun
+$ cd uevalrun
+$ ./make  # This downloads some more files during compilation.</pre>
+
+<p>Try it (the italic parts are displayed by the program):
+
+<pre>$ (echo '#! perl'; echo 'print "Hello"x2, "\n"') >foo.pl
+$ echo HelloHello >expected.txt
+$ ./uevalrun -M 10 -T 9 -E 9 -s foo.pl -t /dev/null -e expected.txt
+<i>...
+@ result: pass</i>
+$ echo '/**/ int main() { return!printf("HelloHello\n"); }' >foo.c
+$ ./uevalrun -M 10 -T 9 -E 9 -U 19 -N 32 -C 9 \
+  -s foo.c -t /dev/null -e expected.txt
+<i>...
+@ result: pass</i></pre>
+
+<h2>How to use</h2>
+
+<p>TODO(pts): Write this section.
+
+<h2>Requirements</h2>
+
+<p>Security is the most important requirement of uevalrun, followed by high
+performance and usability.
+
+<p>The sandboxing must be secure, more specifically:
 
 <ul>
-<li>foo
-<ol>
-<li>food
-<li>foot
-</ol>
+<li>Programs inside the sandbox must not be able to communicate with
+    the outside world, except for their stdin and stdout. So they don't have
+    access to the filesystem (except for some read-only access to some
+    whitelisted system libraries and binaries), and they can't do network
+    I/O. If uevalrun is used for programming contest submission evaluation,
+    this restriction prevents the program from finding and reading the file
+    containing the expected output.
+<li>Sandboxed programs must not be able to use more system resources (memory,
+    disk, CPU) than what was allocated for them.
+<li>Sandboxed programs must not be running for a longer period of time than
+    what was allocated.
+<li>Even the compilation of programs to be run (executed) inside the sandbox
+    must be sandboxed (possibly with different system resource allocation),
+    to prevent the attacker from submitting a program source code which
+    exploits a bug in the compiler.
+<li>The sandbox must be reverted to its initial state before each compilation
+    and execution, so sandboxed programs won't be able to gather information
+    about previous compilations and executions. For programming contests,
+    this restriction prevents the program from reading other contestants'
+    submissions or their output.
+<li>Timeouts (both real time and user time) must be enforced outside the
+    sandbox, so the program will be reliably killed if it runs for too long
+    time, even if it tampers with time measurement inside the sandbox.
+<li>Sanboxed programs must not be able to lie about their success, their
+    performance or the correctness of their output by writing special marker
+    characters to their stdout or stderr.
+</ul>
+
+<p>The sandbox must be fast and waste few resources, more specifically:
+
 <ul>
-<li>food
-<li>foot
+<li>Reverting the sandbox to its initial, empty state must be very fast
+    (preferably faster than 1 second).
+<li>Starting a program inside the sandbox must be very fast (preferably
+    faster than 1 second).
+<li>Running a program inside the sandbox must not be much slower than running
+    the same program outside the sandbox. If the program is CPU-intensive,
+    it may run 1.1 times slower (i.e. 10% slower) inside than outside. If
+    the program is I/O-intensive, it may run 10 times slower inside than
+    outside. This requirement is intentionally quite loose on I/O
+    virtualization performance.
+<li>Running a program inside the sandbox must not need more than 10MB more
+    memory than running the same program outside.
+<li>Running a program inside the sandbox must not need any disk space,
+    except for the disk space needed by the program binary, the test input
+    and the expected output, all stored as files outside the sandbox.
+<li>Compilation inside the sandbox must require only a reasonable amount of
+    temporary disk space (for the file to be compiled, the temporary files,
+    and the output binary).
 </ul>
-<li>bar
+
+<p>The sandbox must be easy to use and versatile, more specifically:
+
+<ul>
+<li>Sandboxed programs must be able to accept any 8-bit binary input (stdin).
+<li>Sandboxed programs must be able to write any 8-bit binary output to
+    their stdout.
+<li>Multiple sandboxed programs must be able to run at the same time on the
+    same host system, without affecting each other.
+<li>If a sandboxed program fails (e.g. because it writes to its stdout
+    different from what was expected, or it does a memory access violation,
+    it reaches a timeout, it exceeds its allocated memory etc.), the proper
+    failure reason has to be reported (e.g. ``wrong answer'' must not be
+    reported if the program times out or vice versa).
+<li>The sandboxing software must have as little few system dependencies as
+    possible. It must be able to run in a restricted (e.g. chroot)
+    environment, it must not depend on system libraries or configuration.
+    It must work on 32-bit (x86, i386) and 64-bit (x86_64, amd64) Linux
+    systems, on any Linux distirubution.
+<li>Sandboxed programs can be written in C, C++, Python, Ruby, Perl and PHP,
+    or in any language whose compiler can produce a 32-bit (i386) Linux
+    statically linked executable binary.
 </ul>
 
-<h2>Next section</h2>
-<p>3a You can override a built-in implicit rule (or one you have defined
-yourself) by defining a new pattern rule with the same target and
-prerequisites, but different commands.  When the new rule is defined,
-the built-in one is replaced.  The new rule's position in the sequence
-of implicit rules is determined by where you write the new rule.
-You can cancel a built-in implicit rule by defining a pattern rule
-with the same target and prerequisites, but no commands.  For example,
-the following would cancel the rule that runs the assembler:
+<h2>Design</h2>
 
-<h1>Continue</h1>
-<p>4a You can override a built-in implicit rule (or one you have defined
-yourself) by defining a new pattern rule with the same target and
-prerequisites, but different commands.  When the new rule is defined,
-the built-in one is replaced.  The new rule's position in the sequence
-of implicit rules is determined by where you write the new rule.
-You can cancel a built-in implicit rule by defining a pattern rule
-with the same target and prerequisites, but no commands.  For example,
-the following would cancel the rule that runs the assembler:
-<p>5
-<p>6
-<p>7
-<p>8
+<p>To fullfill the requirements, the following fundamental building blocks
+are used.
 
+<p><a href="http://user-mode-linux.sourceforge.net/>User-mode Linux</a>
+(UML) is used for virutalization: both compilation and execution is
+performed in a UML guest, reading data from the host system using virtual
+block devices (<code>ubd</code>), and writing its output to its
+<code>/dev/tty1</code> (<code>con0</code>), which can be read by a process
+on the host. A UML guest kernel (currently 2.6.31.1) tailered to the
+sandboxing requirements (security and performance) is configured and
+compiled. Some kernel patches are applied to increase security, reliability
+and performance. (Please note that these patches apply to the UML guest
+kernel only, so the host remains unpatched, and rebooting is not needed
+either.) Networking and the virtual file system are disabled in the UML
+guest kernel for increased security. All unnecessary drivers and features
+are removed from the UML guest kernel to get fast boot times and to reduce
+the overhead.
+
+<p>The underlying virtualization technology used by UML is <a
+href="http://linux.die.net/man/2/ptrace">ptrace()</a>, which doesn't need
+root privileges or a kernel module or kernel modifications in the host. As
+an alternative to UML, <a
+href="http://en.wikipedia.org/wiki/Seccomp">Seccomp</a> could be used for
+sendboxing, but that's quite cumbersome, because the sandboxed process
+cannot allocate memory for itself (see <a
+href="http://code.google.com/p/seccompsandbox/">the Google Chrome Seccomp
+sandbox</a> for a generic solution), but it's still prohibitively cumbersome
+to sandbox GCC this way (with its requirements for forking and creating
+temporary files). Most sandboxing approaches on Linux require root
+privileges for a short amount of time (for chroot, PID namespaces (see
+<a href="http://linux.die.net/man/2/clone">clone(2)</a>) and other
+namespaces). Most virtualization approaches (like <a
+href="http://www.linux-kvm.org/">KVM</a>, <a
+href="http://en.wikipedia.org/wiki/Xen">Xen</a>, <a
+href="http://www.virtualbox.org/">VirtualBox</a>, except possibly for
+<a href="http://wiki.qemu.org/">QEMU</a>) need loading of kernel modules or
+patching the kernel, and support only slow guest boot times.
+
+<p>With UML, it's possibly to boot the UML guest, run a hello-world binary,
+and halt the UML guest in less than 0.02 second (sustained). For that speed,
+one needs a (guest) kernel patch (included and automatically applied in
+uevalrun) which skips the <i>Calibrating delay loop</i> kernel startup step,
+which usually takes 0.33 second. The memory overhead of UML is also quite
+low (6 MB with a stripped-down kernel).
+
+<p>All software running inside and outside UML is written in C (for high
+performance) and compiled with <a href="http://www.uclibc.org">uClibc</a>
+and linked statically to avoid depending on the libc on the host, and to
+avoid the need for installing a libc in the guest. (The total size of these
+custom-built binaries is less than 100kB.) There is no Linux distribution
+installed the guest &ndash; only a few custom binaries are copied, like a
+custom <code>/sbin/init</code>, which mounts <code>/proc</code>, sets up
+file descriptors and resource limits, and starts the sandboxed program, and
+then halts the guest. The <code>/lib</code> directory in the guest is empty,
+except for compilation, where <code>/lib</code> contains
+<code>libc.a</code>, <code>libstdc++.a</code> etc.
+
+<p><a href="http://www.busybox.net/>BusyBox</a> (statically linked with
+uClibc) is used as a Swiss Army Knife tool for scripting and automation (of
+the build and the setup process), both inside and outside UML. Please note,
+however, that once all the binaries are built and the filesystem images are
+created, BusyBox is not used anymore for running sandboxed programs and
+evaluating their output (except for temporary filesystem creation) because
+of performance reasons, but work is done by the small and fast custom C
+tools just compiled.
+
+<p>Sandboxed program sources can be written in C (using a large subset of
+<a href="http://www.uclibc.org/">uClibc</a> as the system library), C++
+(using <a href="http://www.uclibc.org/">uClibc</a> and
+<a href="http://gcc.gnu.org/libstdc++/">libstdc++</a>), Python (using
+all the built-in Python modules), Ruby (using just the built-in Ruby
+modules and classes which are implemented in C), Perl (using only the
+few dozen most common modules), or PHP (using just the built-in PHP
+functions which are implemented in C).
+
+<p>For C and C++ compilation, a <a href="http://gcc.gnu.org/>GCC</a> 4.1.2
+toolchain is used which is based on <a
+href="http://www.uclibc.org/">uClibc</a> and produces statically linked
+executables.
+
+<p>Interpreters for Python, Ruby, Perl and PHP are provided as precompiled,
+self-contained, single, statically linked, 32-bit (i386) Linux executables.
+It's easy to copy them to the <code>/bin</code> directory of the UML guest.
+
+<p>All tools used for building the software are either shipped with the
+software, or the software downloads them during compilation. All binary
+tools are statically linked, 32-bit (i386) Linux executables. This provides
+maximum host system compatibility and reproducible behavior across systems.
+
+<p>In our speed measurements, CPU-intensive programs running inside UML run
+1% slower than outside UML, but I/O-intensive programs (such as C++
+compilation with GCC) can be about 6 times slower.
+
+<p>The <a href="http://http://en.wikipedia.org/wiki/MINIX_file_system">
+Minix filesystem</a>
+is used in the UML guests for both read-only filesystems (e.g. the
+root filesystem with the scripting language interpreters) and read-write
+filesystems (such as <code>/tmp</code> for the temporary assembly files
+created by GCC). The Minix filesystem was chosen instead of ext2 and other
+usual Linux filesystem, because it has less size overhead, it's codebase is
+smaller, and it has equally good performance for the small and mostly
+read-only filesystems it is used for. 
 
 </body></html>

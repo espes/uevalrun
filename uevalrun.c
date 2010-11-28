@@ -14,8 +14,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * TODO(pts): make error messages more useful if the compilation fails
  * TODO(pts): don't lock the block devices in UML (read-only)
+ * TODO(pts): make error messages more useful if the compilation fails
+ * TODO(pts): Is there a 64MB limit (or just df?) for minix filesystems?
  * TODO(pts): move auxilary files like *-config to another dir
  * TODO(pts): build our binaries with our cross-compiler
  * TODO(pts): Benchmark UML speed by running g++ hello.cc and g++ all.cc
@@ -683,7 +684,7 @@ static int work(flags_s *flags) {
   if (is_gcx) {
     if (f != NULL)
       fclose(f);
-    uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.gcc.minix.img");
+    uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.gcx.minix.img");
     if (NULL == (f = fopen(uml_rootfs_path, "r"))) {
       printf("@ error: uml_rootfs not found: %s: %s\n",
              uml_rootfs_path, strerror(errno));

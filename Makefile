@@ -35,7 +35,7 @@ rootfs_gcx uevalrun.rootfs.gcx.minix.img:
 	./busybox sh ./make_rootfs_gcx.sh
 
 run_sys: uevalrun.rootfs.minix.img
-	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=30M ubda=uevalrun.rootfs.minix.img rw
+	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=30M ubda=uevalrun.rootfs.minix.img ro
 
 run_mini_sys:
 	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=30M ubda=uevalrun.rootfs.mini.minix.img init=/bin/sh rw

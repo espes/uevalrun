@@ -11,7 +11,10 @@ test "${0%/*}" != "$0" && cd "${0%/*}"
 export PATH=/dev/null
 
 test -f busybox
-PROGS='busybox perl-5.10.1 php-5.3.3 ruby-1.8 ruby-1.9 stackless2.7'
+# TODO(pts): Make it configurable so some of these won't be needed.
+DPROGS="perl5.10 php5.3 ruby1.8 ruby1.9 stackless2.7"
+./busybox sh ./download.sh $DPROGS
+PROGS="$DPROGS busybox"
 PROGS_KB=$(./busybox ls -l $PROGS | ./busybox awk '{s+=(($5+1023)/1024)}END{printf"%d\n",s}')
 test "$PROGS_KB"
 # TODO(pts): Give a better estimate.
@@ -65,11 +68,11 @@ mknod /fs/dev/urandom c 1 9
 chmod 666 /fs/dev/urandom
 
 (cd /fs && tar xf /dev/ubdd) || exit "$?"  # creates /fs/busybox /fs/ruby1.8
-mv /fs/ruby-1.8 /fs/bin/ruby1.8
+mv /fs/ruby1.8 /fs/bin/ruby1.8
 ln -s ruby1.8 /fs/bin/ruby
-mv /fs/ruby-1.9 /fs/bin/ruby1.9
-mv /fs/php-5.3.3 /fs/bin/php
-mv /fs/perl-5.10.1 /fs/bin/perl
+mv /fs/ruby1.9 /fs/bin/ruby1.9
+mv /fs/php5.3 /fs/bin/php
+mv /fs/perl5.10 /fs/bin/perl
 mv /fs/stackless2.7 /fs/bin/stackless2.7
 ln -s stackless2.7 /fs/bin/python
 ln -s stackless2.7 /fs/bin/stackless

@@ -15,15 +15,12 @@ test -f busybox
 
 PACKAGES='gcxbase gcc gxx'
 
+FILES=
 for P in $PACKAGES; do
-  F="$P.stbx86.tbz2"
-  if ! test -f "$F.downloaded"; then
-    ./busybox wget -c -O "$F" \
-        http://pts-mini-gpl.googlecode.com/svn/trunk/stbx86/"$F"
-    ./busybox touch "$F".downloaded
-  fi
-  test -s "$F"
+  FILES="$FILES $P.stbx86.tbz2"
 done
+
+./download.sh $FILES
 
 # This estimate is based on the total size of $PACKAGES extracted, plus busybox etc.
 MINIX_KB=56000

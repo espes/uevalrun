@@ -128,7 +128,7 @@ static int work() {
   char* args[16];
   char is_ruby19 = 0;
   char is_gcx = 0;
-  char *gcx_src_path;
+  char *gcx_src_path = NULL;
 
   if (0 == tcgetattr(1, &ti)) {  /* Almost always true. */
     /* Don't convert \n to \n when printing. */

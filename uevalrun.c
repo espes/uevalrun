@@ -17,11 +17,14 @@
  * TODO(pts): make error messages more useful if the compilation fails
  * TODO(pts): Is there a 64MB limit (or just df?) for minix filesystems?
  * TODO(pts): move auxilary files like *-config to another dir
- * TODO(pts): build our binaries with our cross-compiler
  * TODO(pts): Benchmark UML speed by running g++ hello.cc and g++ all.cc
  *            inside and outside UML (6x slower)
  * TODO(pts): Benchmark CPU-intensive calculations inside and outside UML.
  *            (1x slower).
+ * * overhead:
+ *   Intel(R) Core(TM)2 Duo CPU T6600 @ 2.20GHz, 4GB RAM.
+ *   Just the UML kernel with a hello-world C binary: 50.0625 per second.
+ *   Answer verification (uevalrun) for hello-world C binary: 43.3163 per second.
  * * we have to set: CONFIG_HIGH_RES_TIMERS=y
  *   to avoid this kernel syslog message: Switched to NOHz mode on CPU #0
  */

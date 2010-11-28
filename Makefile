@@ -12,18 +12,19 @@ export PATH
 # This must be a 32-bit compiler.
 # TODO(pts): How to enforce 32-bit output for GCC?
 CCBIN = cross-compiler/bin/i686-gcc
-CFLAGS =
-CC = $(CCBIN) $(CFLAGS)
+CFLAGS = -s -O2 -static -W -Wall
+CC = $(CCBIN)
 
 # TODO(pts): Configure that some of these features are not needed.
 ALL = uevalrun uevalrun.guestinit minihalt uevalrun.rootfs.minix.img uevalrun.rootfs.gcx.minix.img
+AUX = repeat
 
 .PHONY: all clean run_sys run_mini_sys run_gcx_sys rootfs rootfs_gcx
 
 all: $(ALL)
 
 clean:
-	./busybox rm -f $(ALL)
+	./busybox rm -f $(ALL) $(AUX)
 
 # Cancel some implicit rules of GNU make.
 %: %.c
@@ -38,17 +39,20 @@ $(CCBIN):
 	test -x $(CCBIN)
 
 uevalrun: uevalrun.c $(CCBIN)
-	$(CC) -s -W -Wall -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
+
+repeat: repeat.c $(CCBIN)
+	$(CC) $(CFLAGS) -o $@ $<
 
 minihalt: minihalt.c $(CCBIN)
-	$(CC) -s -W -Wall -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
 
 uevalrun.guestinit: guestinit.c $(CCBIN)
-	$(CC) -s -W -Wall -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
 
 # Easier to manage the binary here (e.g. with cp precompiled/* .)
 xcat: examples/xcat.c $(CCBIN)
-	$(CC) -s -W -Wall -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
 
 # TODO(pts): Maybe add dependency on ruby1.8 etc. later
 rootfs uevalrun.rootfs.minix.img: ./busybox make_rootfs.sh

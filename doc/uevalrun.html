@@ -1,6 +1,8 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+  "http://www.w3.org/TR/html4/loose.dtd">
 <html><head>
 <title>Documentation of uevalrun</title>
-<meta name=http-equiv content="Content-Type: text/html; charset=UTF-8">
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
 <style type="text/css">
 body {
   background: #fff;
@@ -52,7 +54,7 @@ pre {
 }
 
 </style>
-<script>
+<script type="text/javascript">
 function adjustHeight() {
   try {
     if (_args()["parent"]) {
@@ -208,7 +210,7 @@ performance and usability.
 <p>To fullfill the requirements, the following fundamental building blocks
 are used.
 
-<p><a href="http://user-mode-linux.sourceforge.net/>User-mode Linux</a>
+<p><a href="http://user-mode-linux.sourceforge.net/">User-mode Linux</a>
 (UML) is used for virutalization: both compilation and execution is
 performed in a UML guest, reading data from the host system using virtual
 block devices (<code>ubd</code>), and writing its output to its
@@ -223,8 +225,8 @@ guest kernel for increased security. All unnecessary drivers and features
 are removed from the UML guest kernel to get fast boot times and to reduce
 the overhead.
 
-<p>The underlying virtualization technology used by UML is <a
-href="http://linux.die.net/man/2/ptrace">ptrace()</a>, which doesn't need
+<p>The underlying virtualization technology used by UML is
+<a href="http://linux.die.net/man/2/ptrace">ptrace()</a>, which doesn't need
 root privileges or a kernel module or kernel modifications in the host. As
 an alternative to UML, <a
 href="http://en.wikipedia.org/wiki/Seccomp">Seccomp</a> could be used for
@@ -262,7 +264,7 @@ then halts the guest. The <code>/lib</code> directory in the guest is empty,
 except for compilation, where <code>/lib</code> contains
 <code>libc.a</code>, <code>libstdc++.a</code> etc.
 
-<p><a href="http://www.busybox.net/>BusyBox</a> (statically linked with
+<p><a href="http://www.busybox.net/">BusyBox</a> (statically linked with
 uClibc) is used as a Swiss Army Knife tool for scripting and automation (of
 the build and the setup process), both inside and outside UML. Please note,
 however, that once all the binaries are built and the filesystem images are
@@ -280,9 +282,9 @@ modules and classes which are implemented in C), Perl (using only the
 few dozen most common modules), or PHP (using just the built-in PHP
 functions which are implemented in C).
 
-<p>For C and C++ compilation, a <a href="http://gcc.gnu.org/>GCC</a> 4.1.2
-toolchain is used which is based on <a
-href="http://www.uclibc.org/">uClibc</a> and produces statically linked
+<p>For C and C++ compilation, a <a href="http://gcc.gnu.org/">GCC</a> 4.1.2
+toolchain is used which is based on
+<a href="http://www.uclibc.org/">uClibc</a> and produces statically linked
 executables.
 
 <p>Interpreters for Python, Ruby, Perl and PHP are provided as precompiled,

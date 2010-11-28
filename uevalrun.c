@@ -14,7 +14,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * TODO(pts): don't lock the block devices in UML (read-only)
  * TODO(pts): make error messages more useful if the compilation fails
  * TODO(pts): Is there a 64MB limit (or just df?) for minix filesystems?
  * TODO(pts): move auxilary files like *-config to another dir
@@ -721,14 +720,17 @@ static int work(flags_s *flags) {
   args[i++] = "ssl=null";
   args[i++] = "con0=fd:-1,fd:1";
   args[i++] = memarg;
-  args[i++] = xstrcat("ubda=", uml_rootfs_path);
-  args[i++] = xstrcat("ubdb=", flags->solution_binary);
+  /* `r' means read-only, see 'r' in ubd_kern.c. We specify it so multiple
+   * processes can concurrently open it.
+   */
+  args[i++] = xstrcat("ubdar=", uml_rootfs_path);
+  args[i++] = xstrcat("ubdbr=", flags->solution_binary);
   /* TODO(pts): Verify that flags->test_input etc. don't contain comma, space or
    * something UML would interpret.
    */
   if (flags->test_input != NULL)
-    args[i++] = xstrcat("ubdc=", flags->test_input);
-  args[i++] = xstrcat("ubdd=", guestinit_path);
+    args[i++] = xstrcat("ubdcr=", flags->test_input);
+  args[i++] = xstrcat("ubddr=", guestinit_path);
   if (is_gcx)
     args[i++] = xstrcat("ubde=", flags->gcxtmp_path);
   args[i++] = xstrcat("solution_format=", solution_format);

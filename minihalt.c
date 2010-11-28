@@ -11,8 +11,8 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-  */
-/* i386-uclibc-gcc -s -static -W -Wall -o minihalt minihalt.c */
+ */
+
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/mount.h>

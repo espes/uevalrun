@@ -26,6 +26,7 @@
  * * we have to set: CONFIG_HIGH_RES_TIMERS=y
  *   to avoid this kernel syslog message: Switched to NOHz mode on CPU #0
  */
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>

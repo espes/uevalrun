@@ -1,13 +1,21 @@
 #! /bin/bash --
+#
+# examples/run.sh: Run uevalrun with some preconfigured settings.
+# by pts@fazekas.hu at Sun Nov 28 13:17:28 CET 2010
+#
+# This program is free software; you can redistribute it and/or modify   
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 set -ex
+# Make sure we fail unless weuse ./busybox for all non-built-in commands.
+export PATH=/dev/null
 test "${0%/*}" != "$0" && cd "${0%/*}"
-if test "$CC"; then
-  :
-elif i386-uclibc-gcc -v >/dev/null 2>&1; then
-  CC='i386-uclibc-gcc -static'
-else
-  CC='gcc -static'
-fi
 ../make -C ..
 if test "$1" = python; then
   ../uevalrun -M 32 -T 3 -E 20 -s scat.py -t answer.in -e answer.exp
@@ -29,9 +37,9 @@ elif test "$1" = long; then
   perl scatlong.pl >long.exp  # TODO(pts): Do this without Perl.
   ../uevalrun -M 32 -T 3 -E 20 -s scatlong.pl -t answer.in -e long.exp
 elif test "$#" = 1; then
-  $CC -W -Wall -s -O2 -static -o xcat xcat.c
-  ../uevalrun -M 26 -T 3 -E 20 -s xcat -t answer.in -e answer.bad.exp
+  ../make -C .. xcat
+  ../uevalrun -M 26 -T 3 -E 20 -s ../xcat -t answer.in -e answer.bad.exp
 else
-  $CC -W -Wall -s -O2 -static -o xcat xcat.c
-  ../uevalrun -M 26 -T 3 -E 20 -s xcat -t answer.in -e answer.exp
+  ../make -C .. xcat
+  ../uevalrun -M 26 -T 3 -E 20 -s ../xcat -t answer.in -e answer.exp
 fi

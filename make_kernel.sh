@@ -3,29 +3,36 @@
 # make_kernel.sh: build the uevalrun.linux.uml kernel
 # by pts@fazekas.hu at Wed Nov 24 00:26:59 CET 2010
 #
+# This program is free software; you can redistribute it and/or modify   
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+set -ex
 
 # Make sure we fail unless weuse ./busybox for all non-built-in commands.
 export PATH=/dev/null
 
-KERNEL_TBZ2="${KERNEL_TBZ2:-linux-2.6.36.1.tar.bz2}"
-CROSS_COMPILER=cross-compiler-i686
-
-set -ex
-
 test "${0%/*}" != "$0" && cd "${0%/*}"
 
-if ! test -f "$KERNEL_TBZ2.downloaded"; then
-  ./busybox wget -c -O "${KERNEL_TBZ2}" http://www.kernel.org/pub/linux/kernel/v2.6/"${KERNEL_TBZ2##*/}"
-  ./busybox touch "$KERNEL_TBZ2.downloaded"
-fi
+KERNEL_TBZ2="${KERNEL_TBZ2:-linux-2.6.36.1.tar.bz2}"
 
-if ! test -f "$CROSS_COMPILER.tar.bz2.downloaded"; then
-  ./busybox wget -c -O "$CROSS_COMPILER.tar.bz2" http://pts-mini-gpl.googlecode.com/files/"$CROSS_COMPILER".tar.bz2
-  ./busybox touch "$CROSS_COMPILER.tar.bz2.downloaded"
-fi
+./busybox sh ./download.sh "$KERNEL_TBZ2" gcxbase.stbx86.tbz2 gcc.stbx86.tbz2 gcctool.stbx86.tbz2 gcxtool.stbx86.tbz2
 
 ./busybox rm -rf make_kernel.tmp
 ./busybox mkdir make_kernel.tmp
+
+./busybox mkdir make_kernel.tmp/cross-compiler
+for P in gcxbase gcc gcctool gcxtool; do
+  : Extracting "$P"
+  (cd make_kernel.tmp/cross-compiler && ../../busybox tar xj) <"$P.stbx86.tbz2" || exit "$?"
+done
+
 : Extracting "$KERNEL_TBZ2"
 (cd make_kernel.tmp && ../busybox tar xj) <"$KERNEL_TBZ2" || exit "$?"
 ./busybox mv make_kernel.tmp/linux-* make_kernel.tmp/kernel
@@ -62,10 +69,6 @@ for F in cat cmp cp cut date echo expr grep hostname mkdir mv rm \
 ; do
   ./busybox ln -s busybox make_kernel.tmp/bin/"$F"
 done         
-
-: Extracting "$CROSS_COMPILER.tar.bz2"
-(cd make_kernel.tmp && ../busybox tar xj) <"$CROSS_COMPILER.tar.bz2" || exit "$?"
-./busybox mv make_kernel.tmp/cross-compiler-* make_kernel.tmp/cross-compiler
 
 # TODO(pts): Auto-detect non-i686 prefixes.
 CROSS="$PWD/make_kernel.tmp/cross-compiler/bin/i686-"

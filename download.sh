@@ -7,6 +7,7 @@
 download_stbx86_pkg() {
   local F="$1.stbx86.tbz2"  # e.g. F=gcc.stbx86.tbz2
   if ! test -f "$F.downloaded"; then
+    # TODO(pts): Don't fail if fully downloaded: wget: server returned error: HTTP/1.1 416 Requested Range Not Satisfiable
     ./busybox wget -c -O "$F" \
         http://pts-mini-gpl.googlecode.com/svn/trunk/stbx86/"$F"
     ./busybox touch "$F".downloaded
@@ -31,7 +32,7 @@ for F in "$@"; do
       echo "info: already downloaded: $F" >&2
       continue
     fi
-    rm -f "$F"  # Remove empty file.
+    ./busybox rm -f "$F" "$F.downloaded"  # Remove empty file.
   fi
   echo "info: downloading: $F" >&2
   if test "${F%.stbx86.tbz2}" != "$F"; then
@@ -48,6 +49,12 @@ for F in "$@"; do
     download_stbx86_pkg "$F"
     ./busybox tar -Oxjf "$F".stbx86.tbz2 bin/"$F" >"$F"
     ./busybox chmod +x "$F"
+    ./busybox touch "$F".downloaded
+    set +x
+  elif test "$F" = linux-2.6.36.1.tar.bz2 ||
+       test "$F" = linux-2.6.31.tar.bz2; then
+    set -x
+    ./busybox wget -c -O "$F" http://www.kernel.org/pub/linux/kernel/v2.6/"$F"
     ./busybox touch "$F".downloaded
     set +x
   else

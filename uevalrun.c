@@ -14,6 +14,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * TODO(pts): make error messages more useful if the compilation fails
  * TODO(pts): don't lock the block devices in UML (read-only)
  * TODO(pts): move auxilary files like *-config to another dir
  * TODO(pts): build our binaries with our cross-compiler
@@ -406,6 +407,7 @@ static int work(flags_s *flags) {
   FILE *f, *fexp, *fout;
   int i, j, n, line, col;
   char is_gcx;
+  char is_rootfs_missing;
   int answer_remaining;
   char *args[16];
   char *envs[] = {NULL};
@@ -668,14 +670,33 @@ static int work(flags_s *flags) {
   }
   fclose(f);
 
-  if (is_gcx) {
-    uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.gcc.minix.img");
-  } else {
-    uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.minix.img");
-  }
+  is_rootfs_missing = 0;
+  uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.minix.img");
   if (NULL == (f = fopen(uml_rootfs_path, "r"))) {
-    printf("@ error: uml_rootfs not found: %s: %s\n",
+    printf("@ error: uml rootfs not found: %s: %s\n",
            uml_rootfs_path, strerror(errno));
+    printf("@ advice: run this first: (cd '%s' && ./make rootfs)\n",
+           flags->prog_dir);
+    is_rootfs_missing = 1;
+  }
+
+  if (is_gcx) {
+    if (f != NULL)
+      fclose(f);
+    uml_rootfs_path = xstrcat(flags->prog_dir, "/uevalrun.rootfs.gcc.minix.img");
+    if (NULL == (f = fopen(uml_rootfs_path, "r"))) {
+      printf("@ error: uml_rootfs not found: %s: %s\n",
+             uml_rootfs_path, strerror(errno));
+      if (is_rootfs_missing) {
+        printf("@ advice: run this first: (cd '%s' && "
+               "./make rootfs rootfs_gcx)\n", flags->prog_dir);
+      } else {
+        printf("@ advice: run this first: (cd '%s' && ./make rootfs_gcx)\n",
+               flags->prog_dir);
+      }
+      return 2;
+    }
+  } else if (is_rootfs_missing) {
     return 2;
   }
   fclose(f);

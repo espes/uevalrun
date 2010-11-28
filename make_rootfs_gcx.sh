@@ -1,6 +1,6 @@
 #! /bin/bash --
 #
-# make_rootfs_gcc.sh: Create root filesystem for uevalrun UML guests with gcc
+# make_rootfs_gcx.sh: Create root filesystem for uevalrun UML guests with gcc
 # by pts@fazekas.hu at Sat Nov 27 14:01:38 CET 2010
 #
 
@@ -28,17 +28,17 @@ done
 # This estimate is based on the total size of $PACKAGES extracted, plus busybox etc.
 MINIX_KB=56000
 
-./busybox rm -f uevalrun.rootfs.gcc.minix.img  # Make sure it's not mounted.
-./busybox dd if=/dev/zero of=uevalrun.rootfs.gcc.minix.img bs=${MINIX_KB}K count=1
+./busybox rm -f uevalrun.rootfs.gcx.minix.img  # Make sure it's not mounted.
+./busybox dd if=/dev/zero of=uevalrun.rootfs.gcx.minix.img bs=${MINIX_KB}K count=1
 # Increase `-i 100' here to increase the file size limit if you get a
 # `No space left on device' when running this script.
-./busybox mkfs.minix -n 30 -i 2200 uevalrun.rootfs.gcc.minix.img
+./busybox mkfs.minix -n 30 -i 2200 uevalrun.rootfs.gcx.minix.img
 
 
 for P in $PACKAGES; do
   F="$P.stbx86.tbz2"
   test -s "$F"
-  ./busybox cat >mkrootgccpkg.tmp.sh <<ENDMKROOT
+  ./busybox cat >mkrootgcxpkg.tmp.sh <<ENDMKROOT
 #! /bin/sh
 set -ex
 : Extracting $P
@@ -46,14 +46,14 @@ set -ex
 /sbin/minihalt
 ENDMKROOT
 ./uevalrun.linux.uml con=null ssl=null con0=fd:-1,fd:1 mem=10M \
-    ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.gcc.minix.img \
-    ubdc=mkrootgccpkg.tmp.sh ubdd="$F" init=/sbin/minihalt \
+    ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.gcx.minix.img \
+    ubdc=mkrootgcxpkg.tmp.sh ubdd="$F" init=/sbin/minihalt \
     </dev/null
 done
-./busybox rm -f mkrootgccpkg.tmp.sh
+./busybox rm -f mkrootgcxpkg.tmp.sh
 
-./busybox tar cvf mkrootgcc.tmp.tar busybox
-./busybox cat >mkrootgcc.tmp.sh <<'ENDMKROOT'
+./busybox tar cvf mkrootgcx.tmp.tar busybox
+./busybox cat >mkrootgcx.tmp.sh <<'ENDMKROOT'
 #! /bin/sh
 # Don't autorun /sbin/minihalt, so we'll get a kernel panic in the UML guest,
 # thus we'll get a nonzero exit code in the UML host if this script fails.
@@ -143,13 +143,10 @@ ln -s ../bin/busybox /fs/bin/stty
 /sbin/minihalt
 ENDMKROOT
 
-# Use the minix driver in uevalrun.linux.uml to populate our rootfs
-# (uevalrun.rootfs.gcc.minix.img).
-# TODO(pts): Don't screw up the output TTY settinfs on kernel panic.
 ./uevalrun.linux.uml con=null ssl=null con0=fd:-1,fd:1 mem=10M \
-    ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.gcc.minix.img \
-    ubdc=mkrootgcc.tmp.sh ubdd=mkrootgcc.tmp.tar init=/sbin/minihalt \
+    ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.gcx.minix.img \
+    ubdc=mkrootgcx.tmp.sh ubdd=mkrootgcx.tmp.tar init=/sbin/minihalt \
     </dev/null
-./busybox rm -f mkrootgcc.tmp.sh mkrootgcc.tmp.tar
+./busybox rm -f mkrootgcx.tmp.sh mkrootgcx.tmp.tar
 
-: make_rootfs_gcc.sh OK.
+: make_rootfs_gcx.sh OK.

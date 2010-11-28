@@ -102,7 +102,6 @@ ENDMKROOT
 
 # Use the minix driver in uevalrun.linux.uml to populate our rootfs
 # (uevalrun.rootfs.minix.img).
-# TODO(pts): Don't screw up the output TTY settinfs on kernel panic.
 ./uevalrun.linux.uml con=null ssl=null con0=fd:-1,fd:1 mem=10M \
     ubda=uevalrun.rootfs.mini.minix.img ubdb=uevalrun.rootfs.minix.img \
     ubdc=mkroot.tmp.sh ubdd=mkroot.tmp.tar init=/sbin/minihalt \

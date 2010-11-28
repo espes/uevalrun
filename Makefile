@@ -11,7 +11,7 @@ CC_DETECT = $(shell if test "$$CC"; then echo "$$CC"; elif i386-uclibc-gcc -v >/
 
 ALL = uevalrun uevalrun.guestinit minihalt uevalrun.rootfs.minix.img
 
-.PHONY: all clean run_sys run_mini_sys run_gcc_sys
+.PHONY: all clean run_sys run_mini_sys run_gcx_sys rootfs rootfs_gcx
 
 all:
 	$(MAKE) CC='$(CC_DETECT)' $(ALL)
@@ -28,8 +28,11 @@ minihalt: minihalt.c
 uevalrun.guestinit: guestinit.c
 	$(CC) -s -W -Wall -o $@ $<
 
-uevalrun.rootfs.minix.img:
+rootfs uevalrun.rootfs.minix.img:
 	./busybox sh ./make_rootfs.sh
+
+rootfs_gcx uevalrun.rootfs.gcx.minix.img:
+	./busybox sh ./make_rootfs_gcx.sh
 
 run_sys: uevalrun.rootfs.minix.img
 	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=30M ubda=uevalrun.rootfs.minix.img rw
@@ -37,10 +40,10 @@ run_sys: uevalrun.rootfs.minix.img
 run_mini_sys:
 	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=30M ubda=uevalrun.rootfs.mini.minix.img init=/bin/sh rw
 
-run_gcc_sys:
+run_gcx_sys:
 	./busybox dd if=/dev/zero of=uevalrun.rootfs.gcxtmp.minix.img bs=2000K count=1
 	./busybox mkfs.minix -n 30 -i 20 uevalrun.rootfs.gcxtmp.minix.img
-	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=60M ubda=uevalrun.rootfs.gcc.minix.img ubdb=uevalrun.rootfs.gcxtmp.minix.img init=/sbin/minihalt rw ubde=hello.c
+	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=60M ubda=uevalrun.rootfs.gcx.minix.img ubdb=uevalrun.rootfs.gcxtmp.minix.img init=/sbin/minihalt rw ubde=hello.c
 
 precompile: uevalrun uevalrun.guestinit minihalt examples/xcat
 	cp $^ precompiled/

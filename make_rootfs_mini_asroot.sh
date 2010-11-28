@@ -39,6 +39,7 @@ test -z "$EUID" || test "$EUID" = 0
 ./busybox mkdir -p rp
 ./busybox mount -o loop uevalrun.rootfs.mini.minix.img rp
 ./busybox mkdir rp/dev rp/bin rp/sbin rp/proc rp/fs
+./busybox ln -s minihalt rp/sbin/halt
 ./busybox cp -a /dev/console rp/dev/
 ./busybox cp -a /dev/ttyS0 rp/dev/
 ./busybox cp -a /dev/ttyS1 rp/dev/

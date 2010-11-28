@@ -1,6 +1,6 @@
 #! /bin/bash --
 #
-# make_rootfs.sh: Create the ext2 root filesystem for uevalrun UML guests
+# make_rootfs.sh: Create the root filesystem for uevalrun UML guests
 # by pts@fazekas.hu at Sat Nov 20 16:42:03 CET 2010
 #
 set -ex
@@ -64,7 +64,7 @@ chmod 666 /fs/dev/random
 mknod /fs/dev/urandom c 1 9
 chmod 666 /fs/dev/urandom
 
-(cd /fs && tar xf /dev/ubdd)  # creates /fs/busybox /fs/ruby1.8
+(cd /fs && tar xf /dev/ubdd) || exit "$?"  # creates /fs/busybox /fs/ruby1.8
 mv /fs/ruby-1.8 /fs/bin/ruby1.8
 ln -s ruby1.8 /fs/bin/ruby
 mv /fs/ruby-1.9 /fs/bin/ruby1.9

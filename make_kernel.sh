@@ -27,11 +27,11 @@ fi
 ./busybox rm -rf make_kernel.tmp
 ./busybox mkdir make_kernel.tmp
 : Extracting "$KERNEL_TBZ2"
-(cd make_kernel.tmp && ../busybox tar xj) <"$KERNEL_TBZ2"
+(cd make_kernel.tmp && ../busybox tar xj) <"$KERNEL_TBZ2" || exit "$?"
 ./busybox mv make_kernel.tmp/linux-* make_kernel.tmp/kernel
 : Applying linux-2.6.36-uevalrun.patch
 # TODO(pts): Make ``busybox patch'' not talk to the user.
-(cd make_kernel.tmp/kernel && ../../busybox patch -p1) <linux-2.6.36-uevalrun.patch
+(cd make_kernel.tmp/kernel && ../../busybox patch -p1) <linux-2.6.36-uevalrun.patch || exit "$?"
 
 # Make sure that /bin/sh and /bin/bash is not run during the compilation.
 # Please note that there are some scripts which use /usr/bin/perl, but they
@@ -64,7 +64,7 @@ for F in cat cmp cp cut date echo expr grep hostname mkdir mv rm \
 done         
 
 : Extracting "$CROSS_COMPILER.tar.bz2"
-(cd make_kernel.tmp && ../busybox tar xj) <"$CROSS_COMPILER.tar.bz2"
+(cd make_kernel.tmp && ../busybox tar xj) <"$CROSS_COMPILER.tar.bz2" || exit "$?"
 ./busybox mv make_kernel.tmp/cross-compiler-* make_kernel.tmp/cross-compiler
 
 # TODO(pts): Auto-detect non-i686 prefixes.

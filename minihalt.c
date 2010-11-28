@@ -14,6 +14,7 @@
   */
 /* i386-uclibc-gcc -s -static -W -Wall -o minihalt minihalt.c */
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <termios.h>
@@ -25,15 +26,21 @@ int main(int argc, char **argv, char **environ) {
   (void)argc; (void)argv;
   if (getpid() == 1) {
     char *args[] = { "/bin/sh", "/dev/ubdc", NULL };
+    int fd;
     if (0 != mount("dummy", "/proc", "proc", MS_MGC_VAL, NULL)) {
       ERRMSG("minihalt: failed: mount dummy /proc -t proc\n");
       return 2;
     }
     if (0 != mount("/dev/ubdb", "/fs", "minix", MS_MGC_VAL, NULL)) {
-      ERRMSG("minihalt: failed: mount /dev/udb /fs -t minix\n");
+      ERRMSG("minihalt: failed: mount /dev/ubdb /fs -t minix\n");
       return 2;
     }
-    return execve("/bin/sh", args, environ);
+    if (0 <= (fd = open(args[1], O_RDONLY))) {
+      close(fd);
+    } else {
+      args[1] = NULL;  /* just /bin/sh */
+    }
+    return execve(args[0], args, environ);
   }
   /* EINVAL is returned if /fs is not mounted */
   if (0 != umount("/fs") && errno != EINVAL) {

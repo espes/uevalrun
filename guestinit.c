@@ -22,9 +22,11 @@
 #include <sys/ioctl.h>
 #include <sys/klog.h>
 #include <sys/mount.h>
+#include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/resource.h>
 #include <sys/select.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
@@ -54,7 +56,7 @@ static int status;
 
 /** Returns 0 on success; -EINTR */
 static int copy_output(int outfd, char which, char *done_flag) {
-  int got = read(outfd, rbuf + 16, sizeof(rbuf) - 16);
+  int got = read(outfd, rbuf + 16, sizeof(rbuf) - 17);
   int rgot;
   char *p;
   if (0 > got) {
@@ -72,6 +74,7 @@ static int copy_output(int outfd, char which, char *done_flag) {
   } else {
     rgot = got;
     p = rbuf + 16;
+    p[got] = '\0';  /* Just for extra safety. */
     *--p = which == STDOUT_FILENO ? '>' : '!';
     do {
       *--p = rgot % 10 + '0';
@@ -97,7 +100,19 @@ static int copy_output(int outfd, char which, char *done_flag) {
   return 0;
 }
 
-/** @return is_success? */
+/** Convert subprocess exit wait() status to guestinit UML guest exitcode */
+static int status_to_exitcode(int status) {
+  if (WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL) {
+    /* TODO(pts): Better detect out-of-memory, e.g. by analyzing ELF
+     * headers */
+    return 2;
+  } else if (WIFSIGNALED(status) && WTERMSIG(status) == SIGXCPU) {
+    return 3;  /* TODO(pts): Get rid of these magic exitcode constants */
+  }
+  return 1;
+}
+
+/** Returns an UML exitcode (0 on success, a positive value on failure). */
 static int work() {
   struct rlimit rl;
   fd_set rset;
@@ -110,8 +125,10 @@ static int work() {
   int pinfds[2], pstdoutfds[2], pstderrfds[2];
   char *p, *q;
   char* env[] = { NULL };
-  char* args[6];
+  char* args[16];
   char is_ruby19 = 0;
+  char is_gcx = 0;
+  char *gcx_src_path;
 
   if (0 == tcgetattr(1, &ti)) {  /* Almost always true. */
     /* Don't convert \n to \n when printing. */
@@ -191,6 +208,35 @@ static int work() {
     args[0] = "/bin/perl";
     args[1] = "/dev/ubdb";
     args[2] = NULL;
+  } else if (0 == strcmp(p, "gcc")) {
+    is_gcx = 1;
+    gcx_src_path = "/tmp/prog.c";
+    args[0] = "/bin/gcc";  /* This implies -static */
+    /* This could be -o/proc/self/fd/1 , but we want to impose a size limit
+     * on the created executable (in addition to the source file and the
+     * assembly output).
+     */
+    /* TODO(pts): Make uevalrun.c report `No space left on device' smarter. */
+    args[1] = "-o/tmp/prog",
+    /* TODO(pts): Make these flags compatible. */
+    /* Make sure that the args array is large enough. */
+    args[2] = "-Wall";
+    args[3] = "-W";
+    args[4] = "-s";
+    args[5] = "-O2";
+    args[6] = gcx_src_path;
+    args[7] = NULL;
+  } else if (0 == strcmp(p, "gxx")) {
+    is_gcx = 1;
+    gcx_src_path = "/tmp/prog.cc";
+    args[0] = "/bin/g++";  /* This implies -static */
+    args[1] = "-o/tmp/prog",
+    args[2] = "-Wall";
+    args[3] = "-W";
+    args[4] = "-s";
+    args[5] = "-O2";
+    args[6] = gcx_src_path;
+    args[7] = NULL;
   } else if (0 == strcmp(p, "python")) {
     args[0] = "/bin/python";
     args[1] = "-c";
@@ -202,17 +248,29 @@ static int work() {
     return 1;
   }
 
-  /* SUXX: UML pads the file with '\0' to 512-byte block boundary. */
-  if (0 > (fd = open("/dev/ubdc", O_RDONLY))) {  /* input */
-    fprintf(stderr, "guestinit: open(/dev/ubdc) failed: %s\n", strerror(errno));
-    return 1;
+  if (is_gcx) {
+    if (0 > (fd = open("/dev/null", O_RDONLY))) {
+      fprintf(stderr, "guestinit: open(/dev/null) failed: %s\n", strerror(errno));
+      return 1;
+    }
+    fs = 0;
+  } else {
+    /* UML pads the file with '\0' to 512-byte block boundary, but we'll work
+     * it around.
+     */
+    if (0 > (fd = open(is_gcx ? "/dev/null" : "/dev/ubdc", O_RDONLY))) {  /* input */
+      fprintf(stderr, "guestinit: open(input) failed: %s\n", strerror(errno));
+      return 1;
+    }
+    /* TCGETS works just in the UML patched by uevalrun. It's like
+     * BLKGETSIZE64, but it doesn't round up (i.e. it returns the proper file
+     * size).
+     */
+    if (0 != ioctl(fd, TCGETS, &fs)) {
+      fprintf(stderr, "guestinit: size getting failed: %s\n", strerror(errno));
+      return 1;
+    }
   }
-
-  if (0 != ioctl(fd, TCGETS, &fs)) {  /* BLKGETSIZE64 rounds up */
-    fprintf(stderr, "guestinit: size getting failed: %s\n", strerror(errno));
-    return 1;
-  }
-
   if (0 != pipe(pinfds)) {
     fprintf(stderr, "guestinit: input pipe creation failed: %s\n", strerror(errno));
     return 1;
@@ -234,7 +292,86 @@ static int work() {
     close(pinfds[0]);
   }
 
-  /* Not giving up root (setreuid) because we have to power off later. */
+  if (is_gcx) {
+    int src_fd, tmp_fd, wgot;
+    uint64_t src_fs;
+    char* mkargs[] = {
+        "/bin/busybox", "mkfs.minix", "-n", "30", "-i", "8", "/dev/ubde",
+        NULL
+    };
+    fflush(stdout);
+    fflush(stderr);
+    child = fork();
+    if (child < 0) {
+      fprintf(stderr, "guestinit: mktmp fork() failed: %s\n", strerror(errno));
+      return 1;
+    }
+    if (child == 0) {  /* Child process. */
+      status = execve(mkargs[0], mkargs, env);
+      fprintf(stderr, "mktmp execve() failed (%d): %s\n",
+              status, strerror(errno));
+      exit(125);
+    }
+    while (child != waitpid(child, &status, 0)) {}
+    if (status != 0) {
+      fprintf(stderr, "guestinit: mktmp failed with status=0x%x\n", status);
+      return 1;
+    }
+    /* /tmp is a symlink to /fs */
+    if (0 != mount("/dev/ubde", "/fs", "minix", MS_MGC_VAL, NULL)) {
+      fprintf(stderr, "guestinit: failed: mount /dev/ubde /fs -t minix: %s\n",
+              strerror(errno));
+      return 1;
+    }
+    if (0 != chmod("/fs", 01777)) {
+      fprintf(stderr, "guestinit: chmod failed: /fs: %s\n", strerror(errno));
+      return 1;
+    }
+    /* We can't just create a symlink (ln -s /dev/ubdb /tmp/prog.c),
+     * because GCC won't compile block devices.
+     */
+    if (0 > (src_fd = open("/dev/ubdb", O_RDONLY))) {
+      fprintf(stderr, "guestinit: open(source) failed: %s\n", strerror(errno));
+      return 1;
+    }
+
+    if (0 != ioctl(src_fd, TCGETS, &src_fs)) {
+      fprintf(stderr, "guestinit: source size getting failed: %s\n", strerror(errno));
+      return 1;
+    }
+    if (0 > (tmp_fd = open(gcx_src_path, O_WRONLY | O_CREAT | O_EXCL, 0644))) {
+      fprintf(stderr, "guestinit: open(%s) failed: %s\n",
+              gcx_src_path, strerror(errno));
+      return 1;
+    }
+    while (src_fs > 0) {
+      got = read(src_fd, wbuf, src_fs > sizeof wbuf ? sizeof wbuf : src_fs);
+      if (got > 0) {
+        wgot = write(tmp_fd, wbuf, got);
+        if (wgot == got) {
+        } else if (wgot < 0) {
+          fprintf(stderr, "guestinit: source copy write failed: %s\n",
+                  strerror(errno));
+          return 1;
+        } else {
+          fprintf(stderr, "guestinit: source copy write too short\n");
+          return 1;
+        }
+      } else if (got == 0) {
+        fprintf(stderr, "guestinit: source file too short\n");
+        return 1;
+      } else {
+        fprintf(stderr, "guestinit: error reading source file: %s\n",
+                strerror(errno));
+        return 1;
+      }
+      src_fs -= got;
+    }
+    close(tmp_fd);
+    close(src_fd);
+  }
+
+  /* Not giving up root (setreuid) because we have to halt the guest later. */
   fprintf(stderr, "guestinit: info: running solution binary\n");
   fflush(stdout);
   fflush(stderr);
@@ -248,13 +385,22 @@ static int work() {
     close(pinfds[1]);
     close(pstdoutfds[0]);
     close(pstderrfds[0]);
+    if (is_gcx) {  /* Make the compiler stdout (if any) go to stderr */
+      if (pstdoutfds[1] != pstderrfds[1]) {
+        close(pstdoutfds[1]);
+        pstdoutfds[1] = pstderrfds[1];
+      }
+    }
+    fflush(stdout);
     if (pstdoutfds[1] != 1) {
       if (1 != dup2(pstdoutfds[1], 1)) {
         fprintf(stderr, "guestinit: child: dup2() for stdout pipe failed: %s\n", strerror(errno));
         exit(124);
       }
-      close(pstdoutfds[1]);
+      if (pstdoutfds[1] != pstderrfds[1])
+        close(pstdoutfds[1]);
     }
+    fflush(stderr);
     if (pstderrfds[1] != 2) {
       if (2 != dup2(pstderrfds[1], 2)) {
         fprintf(stderr, "guestinit: child: dup2() for stderr pipe failed: %s\n", strerror(errno));
@@ -266,6 +412,7 @@ static int work() {
       fprintf(stderr, "guestinit: child: setreuid() failed\n");
       exit(124);
     }
+#if 0  /* !! gcx */
     rl.rlim_cur = 0;
     rl.rlim_max = 0;
     setrlimit(RLIMIT_CORE, &rl);
@@ -290,10 +437,10 @@ static int work() {
     rl.rlim_cur = RLIM_INFINITY;
     rl.rlim_max = RLIM_INFINITY;
     setrlimit(RLIMIT_STACK, &rl);
+#endif
     status = execve(args[0], args, env);
-    /* Can't report this, stderr is already closed::
-     * fprintf(stderr, "execve() failed (%d): %s\n", status, strerror(errno));
-     */
+    /* This will appear as the stderr of the child. */
+    fprintf(stderr, "execve() failed (%d): %s\n", status, strerror(errno));
     exit(125);  /* End of child process. */
   }
   close(0);
@@ -310,6 +457,10 @@ static int work() {
   }
   is_stdout_done = 0;
   is_stderr_done = 0;
+  if (is_gcx) {
+    close(pstdoutfds[0]);
+    is_stdout_done = 1;
+  }
   maxfd = fd > pstdoutfds[0] ? fd : pstdoutfds[0];
   if (pstderrfds[0] > maxfd) maxfd = pstderrfds[0];
   ++maxfd;
@@ -373,10 +524,36 @@ static int work() {
         }
       }
     }
-    /* Process pstderr first. */
+    /* Process pstderr before pstdout. */
     if (FD_ISSET(pstderrfds[0], &rset)) {
       if (0 != (got = copy_output(pstderrfds[0], STDERR_FILENO, &is_stderr_done)))
         return got;
+      if (is_stderr_done && is_gcx) {  /* Just received EOF. */
+        struct stat st;
+        /* Wait for the compiler to finish. */
+        while (child != waitpid(child, &status, 0)) {}
+        if (status != 0) {
+          fprintf(stderr, "\nguestinit: compiler failed with status=0x%x\n",
+                  status);
+          return status_to_exitcode(status);
+        }
+        /* TODO(pts): Display how long compilation took -- maybe in the host */
+        fprintf(stderr, "\nguestinit: compilation successful\n");
+        if (0 > (pstdoutfds[0] = open("/tmp/prog", O_RDONLY))) {
+          fprintf(stderr, "guestinit: cannot open binary "
+                  "created by the compiler: /tmp/prog: %s\n", strerror(errno));
+          return 1;
+        }
+        if (0 != fstat(pstdoutfds[0], &st)) {
+          fprintf(stderr, "guestinit: fstat: %s\n", strerror(errno));
+          return 1;
+        }
+        fprintf(stderr, "guestinit: compiled binary size is %d bytes\n",
+                (int)st.st_size);
+        is_stdout_done = 0;
+        if (maxfd <= pstdoutfds[0])
+          maxfd = pstdoutfds[0] + 1;
+      }
     }
     if (FD_ISSET(pstdoutfds[0], &rset)) {
       if (0 != (got = copy_output(pstdoutfds[0], STDOUT_FILENO, &is_stdout_done)))
@@ -387,23 +564,18 @@ static int work() {
   close(pinfds[1]);
   close(pstdoutfds[0]);
   close(pstderrfds[0]);
-  /* We wait only this late (even for other processes closing the pipe) to
-   * avoid the race condition between SIGCHLD and reading the output of the
-   * child. We still won't receive the last few error messages.
-   */
-  while (child != waitpid(child, &status, 0)) {}
-  if (status != 0) {
-    fprintf(stderr, "\nguestinit: solution child failed with status=0x%x.\n", status);
-    if (WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL) {
-      /* TODO(pts): Better detect out-of-memory, e.g. by analyzing ELF
-       * headers */
-      return 2;
-    } else if (WIFSIGNALED(status) && WTERMSIG(status) == SIGXCPU) {
-      return 3;  /* TODO(pts): Get rid of these magic exitcode constants */
+  if (!is_gcx) {
+    /* We wait only this late (even for other processes closing the pipe) to
+     * avoid the race condition between SIGCHLD and reading the output of the
+     * child. We still won't receive the last few error messages.
+     */
+    while (child != waitpid(child, &status, 0)) {}
+    if (status != 0) {
+      fprintf(stderr, "\nguestinit: solution child failed with status=0x%x.\n", status);
+      return status_to_exitcode(status);
     }
-    return 1;
+    fprintf(stderr, "\nguestinit: solution child successful\n");
   }
-  fprintf(stderr, "\nguestinit: solution child successful\n");
   return 0;
 }
 

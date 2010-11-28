@@ -62,7 +62,7 @@ chmod 711 /fs/dev/ubdb
 chmod 600 /fs/dev/ubdc
 chmod 700 /fs/dev/ubdd
 
-(cd /fs && tar xf /dev/ubdd)  # creates /fs/busybox.mini and /fs/minihalt
+(cd /fs && tar xf /dev/ubdd) || exit "$?"  # creates /fs/busybox.mini and /fs/minihalt
 mv /fs/busybox.mini /fs/bin/busybox
 mv /fs/minihalt /fs/sbin/minihalt
 ln -s minihalt /fs/sbin/halt

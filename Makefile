@@ -36,3 +36,8 @@ run_sys: uevalrun.rootfs.minix.img
 
 run_mini_sys:
 	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=30M ubda=uevalrun.rootfs.mini.minix.img init=/bin/sh rw
+
+run_gcc_sys:
+	./busybox dd if=/dev/zero of=uevalrun.rootfs.gcxtmp.minix.img bs=2000K count=1
+	./busybox mkfs.minix -n 30 -i 20 uevalrun.rootfs.gcxtmp.minix.img
+	./uevalrun.linux.uml con=null ssl=null con0=fd:0,fd:1 mem=60M ubda=uevalrun.rootfs.gcc.minix.img ubdb=uevalrun.rootfs.gcxtmp.minix.img init=/sbin/minihalt rw ubde=hello.c

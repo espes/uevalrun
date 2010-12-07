@@ -247,10 +247,8 @@ static int work() {
     args[7] = NULL;
   } else if (0 == strcmp(p, "python")) {
     args[0] = "/bin/python";
-    args[1] = "-c";
-    /* Doesn't work (SyntaxError) directly as /bin/python /dev/ubdb */
-    args[2] = "exec(open('/dev/ubdb'))";
-    args[3] = NULL;
+    args[1] = "/dev/ubdb";
+    args[2] = NULL;
   } else {
     fprintf(stderr, "guestinit: unknown solution_format: %s\n", p);
     return 1;

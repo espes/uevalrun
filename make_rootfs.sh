@@ -22,7 +22,7 @@ export PATH=/dev/null
 
 test -f busybox
 # TODO(pts): Make it configurable so some of these won't be needed.
-DPROGS="perl5.10 php5.3 ruby1.8 ruby1.9 stackless2.7"
+DPROGS="perl5.10 php5.3 ruby1.8 ruby1.9 stackless2.7 luajit1.1"
 ./busybox sh ./download.sh $DPROGS
 PROGS="$DPROGS busybox"
 PROGS_KB=$(./busybox ls -l $PROGS | ./busybox awk '{s+=(($5+1023)/1024)}END{printf"%d\n",s}')
@@ -83,6 +83,9 @@ ln -s ruby1.8 /fs/bin/ruby
 mv /fs/ruby1.9 /fs/bin/ruby1.9
 mv /fs/php5.3 /fs/bin/php
 mv /fs/perl5.10 /fs/bin/perl
+mv /fs/luajit1.1 /fs/bin/luajit1.1
+ln -s luajit1.1 /fs/bin/luajit
+ln -s luajit1.1 /fs/bin/lua
 mv /fs/stackless2.7 /fs/bin/stackless2.7
 ln -s stackless2.7 /fs/bin/python
 ln -s stackless2.7 /fs/bin/stackless

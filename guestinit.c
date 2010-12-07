@@ -208,6 +208,10 @@ static int work() {
     args[0] = "/bin/perl";
     args[1] = "/dev/ubdb";
     args[2] = NULL;
+  } else if (0 == strcmp(p, "lua")) {
+    args[0] = "/bin/lua";
+    args[1] = "/dev/ubdb";
+    args[2] = NULL;
   } else if (0 == strcmp(p, "gcc")) {
     is_gcx = 1;
     gcx_src_path = "/tmp/prog.c";

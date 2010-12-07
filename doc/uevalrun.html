@@ -76,12 +76,12 @@ if (typeof _IG_RegisterOnloadHandler != 'undefined')
 
 <p><b>uevalrun</b> is a self-contained computation sandbox for Linux, using
 User-mode Linux for both compilation and execution of the program to be
-sandboxed. The program can be written in C, C++, Python, Ruby, Perl or PHP.
-uevanrun enforces memory limits, timeouts and output size limits in the
+sandboxed. The program can be written in C, C++, Python, Ruby, Perl, Lua or
+PHP. uevanrun enforces memory limits, timeouts and output size limits in the
 sandbox. The primary use case for uevalrun is evaluation of solution
 programs submitted by contestants of programming contests: uevalrun compiles
-the solution, runs it with the test input, compares its output against
-the expected output, and writes a status report.
+the solution, runs it with the test input, compares its output against the
+expected output, and writes a status report.
 
 <h2>Installation</h2>
 
@@ -199,7 +199,8 @@ performance and usability.
     environment, it must not depend on system libraries or configuration.
     It must work on 32-bit (x86, i386) and 64-bit (x86_64, amd64) Linux
     systems, on any Linux distirubution.
-<li>Sandboxed programs can be written in C, C++, Python, Ruby, Perl and PHP,
+<li>Sandboxed programs can be written in C, C++, Python, Ruby, Perl, Lua and
+    PHP,
     or in any language whose compiler can produce a 32-bit (i386) Linux
     statically linked executable binary.
 </ul>
@@ -278,7 +279,8 @@ tools just compiled.
 <a href="http://gcc.gnu.org/libstdc++/">libstdc++</a>), Python (using
 all the built-in Python modules), Ruby (using just the built-in Ruby
 modules and classes which are implemented in C), Perl (using only the
-few dozen most common modules), or PHP (using just the built-in PHP
+few dozen most common modules), Lua (with the full luajit-1.1.6 available)
+or PHP (using just the built-in PHP
 functions which are implemented in C).
 
 <p>For C and C++ compilation, a <a href="http://gcc.gnu.org/">GCC</a> 4.1.2
@@ -286,9 +288,10 @@ toolchain is used which is based on
 <a href="http://www.uclibc.org/">uClibc</a> and produces statically linked
 executables.
 
-<p>Interpreters for Python, Ruby, Perl and PHP are provided as precompiled,
-self-contained, single, statically linked, 32-bit (i386) Linux executables.
-It's easy to copy them to the <code>/bin</code> directory of the UML guest.
+<p>Interpreters for Python, Ruby, Perl, Lua and PHP are provided as
+precompiled, self-contained, single, statically linked, 32-bit (i386) Linux
+executables. It's easy to copy them to the <code>/bin</code> directory of
+the UML guest.
 
 <p>All tools used for building the software are either shipped with the
 software, or the software downloads them during compilation. All binary

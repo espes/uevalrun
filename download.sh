@@ -43,6 +43,7 @@ for F in "$@"; do
        test "$F" = perl5.10 ||
        test "$F" = ruby1.8 ||
        test "$F" = ruby1.9 ||
+       test "$F" = luajit1.1 ||
        test "$F" = stackless2.7 ||
        test "$F" = python2.7; then
     set -x

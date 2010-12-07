@@ -25,6 +25,8 @@ elif test "$1" = php; then
   ../uevalrun -M 32 -T 3 -E 20 -s scat.php -t answer.in -e answer.exp
 elif test "$1" = perl; then
   ../uevalrun -M 32 -T 3 -E 20 -s scat.pl -t answer.in -e answer.exp
+elif test "$1" = lua; then
+  ../uevalrun -M 32 -T 3 -E 20 -s scat.lua -t answer.in -e answer.exp
 elif test "$1" = perl.ok; then
   ../uevalrun -M 32 -T 3 -E 20 -s scatok.pl -t answer.in -e answer.exp
 elif test "$1" = c; then

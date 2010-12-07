@@ -22,19 +22,19 @@ export PATH=/dev/null
 
 test -f busybox
 # TODO(pts): Make it configurable so some of these won't be needed.
-DPROGS="perl5.10 php5.3 ruby1.8 ruby1.9 stackless2.7 luajit1.1"
+DPROGS="perl5.10 php5.3 ruby1.8 ruby1.9 stackless2.7 luajit1.1 smjs1.8"
 ./busybox sh ./download.sh $DPROGS
 PROGS="$DPROGS busybox"
 PROGS_KB=$(./busybox ls -l $PROGS | ./busybox awk '{s+=(($5+1023)/1024)}END{printf"%d\n",s}')
 test "$PROGS_KB"
 # TODO(pts): Give a better estimate.
-let MINIX_KB=10+PROGS_KB+PROGS_KB/256
+let MINIX_KB=12+PROGS_KB+PROGS_KB/256
 
 ./busybox rm -f uevalrun.rootfs.minix.img  # Make sure it's not mounted.
 ./busybox dd if=/dev/zero of=uevalrun.rootfs.minix.img bs=${MINIX_KB}K count=1
 # Increase `-i 100' here to increase the file size limit if you get a
 # `No space left on device' when running this script.
-./busybox mkfs.minix -n 14 -i 110 uevalrun.rootfs.minix.img
+./busybox mkfs.minix -n 14 -i 115 uevalrun.rootfs.minix.img
 
 ./busybox tar cvf mkroot.tmp.tar $PROGS
 ./busybox cat >mkroot.tmp.sh <<'ENDMKROOT'
@@ -86,6 +86,9 @@ mv /fs/perl5.10 /fs/bin/perl
 mv /fs/luajit1.1 /fs/bin/luajit1.1
 ln -s luajit1.1 /fs/bin/luajit
 ln -s luajit1.1 /fs/bin/lua
+mv /fs/smjs1.8 /fs/bin/smjs1.8
+ln -s smjs1.8 /fs/bin/smjs
+ln -s smjs1.8 /fs/bin/js
 mv /fs/stackless2.7 /fs/bin/stackless2.7
 ln -s stackless2.7 /fs/bin/python
 ln -s stackless2.7 /fs/bin/stackless

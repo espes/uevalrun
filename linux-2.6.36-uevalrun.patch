@@ -725,7 +725,7 @@ This patch applies cleanly to the following kernels:
  
  	switch (cmd) {
  		struct cdrom_volctrl volume;
-+	case 0x5401/*TCGETS*/:  /**** pts ****/
++	case 0x540F/*TIOCGPGRP*/:  /**** pts ****/
 +		return put_user(ubd_dev->size, (u64 __user*)arg);
  	case HDIO_GET_IDENTITY:
  		memset(&ubd_id, 0, ATA_ID_WORDS * 2);

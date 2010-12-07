@@ -212,6 +212,10 @@ static int work() {
     args[0] = "/bin/lua";
     args[1] = "/dev/ubdb";
     args[2] = NULL;
+  } else if (0 == strcmp(p, "javascript")) {
+    args[0] = "/bin/js";
+    args[1] = "/dev/ubdb";
+    args[2] = NULL;
   } else if (0 == strcmp(p, "gcc")) {
     is_gcx = 1;
     gcx_src_path = "/tmp/prog.c";
@@ -266,11 +270,11 @@ static int work() {
       fprintf(stderr, "guestinit: open(input) failed: %s\n", strerror(errno));
       return 1;
     }
-    /* TCGETS works just in the UML patched by uevalrun. It's like
+    /* TIOCGPGRP works just in the UML patched by uevalrun. It's like
      * BLKGETSIZE64, but it doesn't round up (i.e. it returns the proper file
      * size).
      */
-    if (0 != ioctl(fd, TCGETS, &fs)) {
+    if (0 != ioctl(fd, TIOCGPGRP, &fs)) {
       fprintf(stderr, "guestinit: size getting failed: %s\n", strerror(errno));
       return 1;
     }
@@ -339,7 +343,7 @@ static int work() {
       return 1;
     }
 
-    if (0 != ioctl(src_fd, TCGETS, &src_fs)) {
+    if (0 != ioctl(src_fd, TIOCGPGRP, &src_fs)) {
       fprintf(stderr, "guestinit: source size getting failed: %s\n", strerror(errno));
       return 1;
     }

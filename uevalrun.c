@@ -559,6 +559,12 @@ static int work(flags_s *flags) {
     } else if (shebang_has_command(hdr, "lua")) {  /* Also matches "luajit". */
       /* Having \0 characters at the end of the file is OK */
       solution_format = "lua";
+    } else if (shebang_has_command(hdr, "js")) {
+      /* Having \0 characters at the end of the file is OK */
+      solution_format = "javascript";
+    } else if (shebang_has_command(hdr, "smjs")) {
+      /* Having \0 characters at the end of the file is OK */
+      solution_format = "javascript";
     } else {
       printf("@ result: file format error: unknown shebang\n");
       return 2;

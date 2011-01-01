@@ -445,7 +445,8 @@ static int work() {
     }
     status = execve(args[0], args, env);
     /* This will appear as the stderr of the child. */
-    fprintf(stderr, "execve() failed (%d): %s\n", status, strerror(errno));
+    fprintf(stderr, "execve(%s) failed (%d): %s\n",
+            args[0], status, strerror(errno));
     exit(125);  /* End of child process. */
   }
   close(0);

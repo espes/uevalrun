@@ -78,6 +78,7 @@ mknod /fs/dev/urandom c 1 9
 chmod 666 /fs/dev/urandom
 
 (cd /fs && tar xf /dev/ubdd) || exit "$?"  # creates /fs/busybox /fs/ruby1.8
+chmod 755 /fs/perl5.10 /fs/php5.3 /fs/ruby1.8 /fs/ruby1.9 /fs/stackless2.7 /fs/luajit1.1 /fs/smjs1.8 /fs/busybox
 mv /fs/ruby1.8 /fs/bin/ruby1.8
 ln -s ruby1.8 /fs/bin/ruby
 mv /fs/ruby1.9 /fs/bin/ruby1.9

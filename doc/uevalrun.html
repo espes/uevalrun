@@ -305,7 +305,7 @@ maximum host system compatibility and reproducible behavior across systems.
 
 <p>In our speed measurements, CPU-intensive programs running inside UML run
 1% slower than outside UML, but I/O-intensive programs (such as C++
-compilation with GCC) can be about 6 times slower.
+compilation with GCC) can be about 15 times slower.
 
 <p>The <a href="http://en.wikipedia.org/wiki/MINIX_file_system">
 Minix filesystem</a>
@@ -315,14 +315,79 @@ filesystems (such as <code>/tmp</code> for the temporary assembly files
 created by GCC). The Minix filesystem was chosen instead of ext2 and other
 usual Linux filesystem, because it has less size overhead, it's codebase is
 smaller, and it has equally good performance for the small and mostly
-read-only filesystems it is used for. 
+read-only filesystems it is used for.
+
+<h2>How to make it faster?</h2>
+
+<p>User-mode Linux runs CPU-bound programs only a few percent slower than how
+fast they run natively on the host. But for programs that do lots of I/O
+(such as compiling a C++ hello-world program containing <code>#include
+&lt;iostream&gt;</code> with <code>g++</code>), User-mode Linux can be about
+15 times slower than native execution. (On some machines, the same bechmark
+is only 6 time slower.)
+
+<p>For sandboxing C and C++ compilation with GCC we could use a method which
+less overhead than User-mode Linux to reduce the slowdown factor of 15.
+One direction is to use a more lightweight <code>ptrace()</code>-based
+approach (thus running everything in userspace), and another direction is to
+use a Linux kernel module (such as <i>apparmor</i>) for sandboxing.
+
+<p>We've tried <a href="http://freshmeat.net/projects/sydbox">sydbox</a> for
+sandboxing, and measured its speed versus native execution and User-mode
+Linux. The result is surprising: User-Mode Linux is faster. Here are the
+details:
+
+<pre>$ cat scat.cc
+//
+#include &lt;iostream&gt;
+using namespace std;
+int main() {
+  (cerr &lt;&lt; "error1\n").flush();
+  cout &lt;&lt; "Hi!\nHello, C++ World!\n";
+  cerr &lt;&lt; "error2" &lt;&lt; endl;
+  return 0;
+}
+
+$ time $CXX -static -o /tmp/prog -W -Wall -s -O2 scat.cc 
+real    0m0.326s
+user    0m0.310s
+sys     0m0.030s
+
+$ ls -l sydbox
+-rwxr-x--- 1 pts eng 525804 Jan  1 17:20 sydbox
+# sydbox and pinktrace downloaded from their GIT repo on 2011-01-01.
+$ file sydbox
+sydbox: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), statically linked, stripped
+$ time ./sydbox -c t.conf -- $CXX -static -o /tmp/prog2 -W -Wall -s -O2 scat.cc 
+real    0m6.576s
+user    0m1.790s
+sys     0m1.880s
+
+$ ls -l uevalrun.linux.uml
+-rwxr-x--- 1 pts eng 1087212 Jan  1 15:02 ../uevalrun.linux.uml
+$ file uevalrun.linux.uml
+uevalrun.linux.uml: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), statically linked, stripped
+$ time ./uevalrun.linux.uml con=null ssl=null con0=fd:-1,fd:1 mem=38M \
+  ubdar=uevalrun.rootfs.gcx.minix.img ubdbr=scat.cc ubdcr=answer.in \
+  ubddr=uevalrun.guestinit ubde=tmp.minix.img solution_format=gxx \
+  init=/dev/ubdd root=98:0 &gt;/tmp/t.bin
+real    0m4.833s
+user    0m0.920s
+sys     0m1.760s</pre>
+
+<p>Our conclusion is that it would be hard to beat the speed decrease of 15
+provided by User-mode Linux &mdash; maybe we would have to write a
+speed-optimized <code>ptrace()</code>-based sandbox in C from scratch. We
+should also measure G++ with another <code>ptrace()</code>-based sandboxing
+method first.
+
 
 <h2>Similar software</h2>
 
 <a href="http://codepad.org/about">codepad</a> is similar to uevalrun: it
 compiles and runs arbitrary user-submitted code in many languages. It uses a
-custom sandboxing based on <code>ptrace()</code> (User-mode Linux used by
-uevalrun is also based in <code>ptrace()</code>).
+custom sandboxing based on <code>ptrace()</code>, implemented in Haskell
+(User-mode Linux used by uevalrun is also based in <code>ptrace()</code>).
 
 <h2>License</h2>
 

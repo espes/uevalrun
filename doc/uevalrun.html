@@ -377,7 +377,10 @@ sys     0m1.760s</pre>
 
 <p>Our conclusion is that it would be hard to beat the speed decrease of 15
 provided by User-mode Linux &mdash; maybe we would have to write a
-speed-optimized <code>ptrace()</code>-based sandbox in C from scratch. We
+speed-optimized <code>ptrace()</code>-based sandbox in C from scratch. In
+theory, this can work, because <code>strace -f -e getppid g++</code> is
+only about 2.64 times slower than regular <i>g++</i>, so our optimized
+implementation can be 3 times slower. We
 should also measure G++ with another <code>ptrace()</code>-based sandboxing
 method first.
 

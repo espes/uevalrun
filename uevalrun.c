@@ -898,10 +898,37 @@ static int work(flags_s *flags) {
             goto at_eof;
           if (mismatch_msg[0] == '\0') {
             answer_remaining = flags->excess_answer_limit_kb << 10;
-            if (0 > (j = getc(fexp))) {
-              sprintf(mismatch_msg, "@ result: wrong answer, .exp is shorter at %d:%d\n", line, col);
+            j = getc(fexp);
+            if (0 > j) {
+              /* try eating up rest of spaces of answer */
+              while (n > 0 && (i == ' ' || i == '\t' || i == '\n')) {
+                if (0 > (i = rbuf_getc()))
+                  goto at_eof;
+                putchar(i);
+                if (fout != NULL)
+                  putc(i, fout);
+                if (i == '\n') {
+                  state = ST_BOL;
+                  ++line;
+                  col = 1;
+                } else {
+                  state = ST_MIDLINE;
+                  ++col;
+                }
+                --n;
+              }
+              if (n > 0) {
+                sprintf(mismatch_msg, "@ result: wrong answer, .exp is shorter at %d:%d\n", line, col);
+              }
             } else if (i != j) {
-              sprintf(mismatch_msg, "@ result: wrong answer, first mismatch at %d:%d\n", line, col);
+              while (n > 0 && j == '\n' && (i == ' ' || i == '\t')) {
+                if (0 > (i = rbuf_getc()))
+                  goto at_eof;
+                --n;
+              }
+              if (i != j) {
+                sprintf(mismatch_msg, "@ result: wrong answer, first mismatch at %d:%d\n", line, col);
+              }
             }
           }
           if (answer_remaining >= 0) {

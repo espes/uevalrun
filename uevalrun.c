@@ -110,9 +110,9 @@ static char shebang_has_command(const char *shebang, const char *command) {
 static void usage(const char* argv0) {
   printf("@ info: usage: %s -M <mem_mb> -T <timeout> "
          "-E <excess_answer_limit_kb> -s <solution_binary> "
-         "[-C <compiler_disk_mb> -N <compiler_mem_mb> -U <compiler_timeout> "
-         "-o <binary_output>] "
-         "[-t <test_input> -e <expected_output>]\n", argv0);
+         "[-C <compiler_disk_mb> -N <compiler_mem_mb> -U <compiler_timeout>] "
+         "[-o <output>] "
+         "[-t <test_input> [-e <expected_output>]]\n", argv0);
 }
 
 /* --- Read buffering */
@@ -232,6 +232,8 @@ typedef struct {
   char *argv0;
   char *gcxtmp_path;
   char is_binary_output_tmp;
+
+  int lenient_whitespace;
 } flags_s;
 
 static int parse_cmdline(int argc, char** argv, flags_s *flags) {
@@ -261,7 +263,7 @@ static int parse_cmdline(int argc, char** argv, flags_s *flags) {
     return 0;
   }
 
-  while ((opt = getopt(argc, argv, "M:N:T:U:E:C:s:t:e:h:o:")) != -1) {
+  while ((opt = getopt(argc, argv, "M:N:T:U:E:C:s:t:e:h:o:i")) != -1) {
     if (opt == 'M') {
       if (1 != sscanf(optarg, "%i", &flags->mem_mb)) {
         printf("@ error: bad -M syntax\n");
@@ -316,6 +318,8 @@ static int parse_cmdline(int argc, char** argv, flags_s *flags) {
         return 1;
       }
       flags->expected_output = optarg;
+    } else if (opt == 'i') {
+      flags->lenient_whitespace = 1;
     } else {
       printf("@ error: unknown command-line flag\n");
       usage(argv[0]);
@@ -593,11 +597,6 @@ static int work(flags_s *flags) {
       usage(flags->argv0);
       return 1;
     }
-    if (flags->expected_output == NULL) {
-      printf("@ error: missing -e\n");
-      usage(flags->argv0);
-      return 1;
-    }
   }
 
   if (is_gcx) {
@@ -615,12 +614,6 @@ static int work(flags_s *flags) {
       /* TODO(pts): Clean up even on signal exit. */
       flags->binary_output = xstrcat3(
           flags->prog_dir, "/uevalrun.tmp.bin.", mismatch_msg);
-    }
-  } else {
-    if (flags->binary_output != NULL) {
-      printf("@ error: unexpected -o\n");
-      usage(flags->argv0);
-      return 1;
     }
   }
 
@@ -900,31 +893,36 @@ static int work(flags_s *flags) {
             answer_remaining = flags->excess_answer_limit_kb << 10;
             j = getc(fexp);
             if (0 > j) {
-              /* try eating up rest of spaces of answer */
-              while (n > 0 && (i == ' ' || i == '\t' || i == '\n')) {
-                if (0 > (i = rbuf_getc()))
-                  goto at_eof;
-                putchar(i);
-                if (fout != NULL)
-                  putc(i, fout);
-                if (i == '\n') {
-                  state = ST_BOL;
-                  ++line;
-                  col = 1;
-                } else {
-                  state = ST_MIDLINE;
-                  ++col;
+              if (flags->lenient_whitespace) {
+                /* try eating up rest of spaces of answer */
+                while (n > 0 && IS_WSPACE(i)) {
+                  if (0 > (i = rbuf_getc()))
+                    goto at_eof;
+                  putchar(i);
+                  if (fout != NULL)
+                    putc(i, fout);
+                  if (i == '\n') {
+                    state = ST_BOL;
+                    ++line;
+                    col = 1;
+                  } else {
+                    state = ST_MIDLINE;
+                    ++col;
+                  }
+                  --n;
                 }
-                --n;
               }
               if (n > 0) {
                 sprintf(mismatch_msg, "@ result: wrong answer, .exp is shorter at %d:%d\n", line, col);
               }
             } else if (i != j) {
-              while (n > 0 && j == '\n' && (i == ' ' || i == '\t')) {
-                if (0 > (i = rbuf_getc()))
-                  goto at_eof;
-                --n;
+              if (flags->lenient_whitespace && j == '\n') {
+                /* When there's a new line try eating extra spaces in the answer */
+                while (n > 0 && IS_WSPACE(i)) {
+                  if (0 > (i = rbuf_getc()))
+                    goto at_eof;
+                  --n;
+                }
               }
               if (i != j) {
                 sprintf(mismatch_msg, "@ result: wrong answer, first mismatch at %d:%d\n", line, col);
